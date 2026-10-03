@@ -1,0 +1,20 @@
+[
+  {
+    "title": "Bugs as Deviant Behavior: A General Approach to Inferring Errors in Systems Code",
+    "authors": "Dawson Engler, David Yu Chen, Seth Hallem, Andy Chou, Benjamin Chelf",
+    "venue": "SOSP 2001",
+    "url": "https://web.stanford.edu/~engler/deviant-sosp-01.pdf",
+    "code": "https://github.com/Cintu07/heresy",
+    "codeName": "heresy",
+    "note": "code says what it believes by repeating it. heresy counts how often a rule holds across a go codebase and flags the sites that break one kept hundreds of times. lock release and nil checks so far, run on 16 big repos."
+  },
+  {
+    "title": "The Era of 1-bit LLMs: All Large Language Models are in 1.58 Bits",
+    "authors": "Shuming Ma et al.",
+    "venue": "arXiv 2024",
+    "url": "https://arxiv.org/abs/2402.17764",
+    "code": "https://github.com/Cintu07/ciot",
+    "codeName": "ciot",
+    "note": "the paper shows ternary weights lose little accuracy. the kernel side is where the published work thins out, so ciot is that part: a ternary matvec on arm neon with no multiplies, checked bit for bit against a scalar reference."
+  }
+]
