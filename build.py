@@ -343,6 +343,29 @@ def feed(posts):
 """)
 
 
+def posts_json(posts):
+    """pawann.dev reads its blog from this, so a post published here shows up there too."""
+    def absolute(src):
+        return SITE + src if src.startswith("/") else src
+
+    out = []
+    for p in posts:
+        body = frontmatter((CONTENT / "posts" / f"{p.slug}.md").read_text(encoding="utf-8"))[1]
+        body = re.sub(r"(!\[[^\]]*\]\()(/[^)\s]+)", lambda m: m.group(1) + absolute(m.group(2)), body)
+        out.append({
+            "slug": p.slug,
+            "title": p.title,
+            "date": p.date.isoformat(),
+            "description": p.description,
+            "tags": p.tags,
+            "cover": absolute(p.cover) if p.cover else "",
+            "minutes": p.minutes,
+            "url": SITE + p.url,
+            "markdown": body,
+        })
+    write("/posts.json", json.dumps(out, ensure_ascii=False))
+
+
 def sitemap(posts, has_books):
     urls = ["/", "/papers/"] + (["/books/"] if has_books else []) + [p.url for p in posts]
     body = "".join(f"<url><loc>{SITE}{u}</loc></url>\n" for u in urls)
@@ -362,6 +385,7 @@ def main():
     books_page(entries)
     not_found()
     feed(posts)
+    posts_json(posts)
     sitemap(posts, bool(entries))
     print(f"built {len(posts)} posts and {len(entries)} books into {DIST.name}/")
 
