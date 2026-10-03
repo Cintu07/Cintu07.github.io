@@ -7,6 +7,8 @@
     "year": "2026",
     "pages": 129,
     "cover": "/assets/img/below-the-code-cover.jpg",
-    "pdf": "/assets/books/below-the-code-assembly.pdf"
+    "pdf": "/assets/books/below-the-code-assembly.pdf",
+    "read": "below-the-code",
+    "note": "Every assembly program in this book was assembled and executed, and every compiler listing and benchmark number was produced by real tools, before it was printed here. Where that was not possible (one SASS listing in chapter 15), the text says so."
   }
 ]

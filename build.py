@@ -157,10 +157,7 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
 <nav>{links}</nav>
 </header>
 {body}
-<footer>
-<span>set in et book. no trackers, no cookies, no javascript.</span>
-<nav><a href="/feed.xml">rss</a></nav>
-</footer>
+<footer><span>pawan kalyan</span><span>{datetime.date.today().year}</span></footer>
 </body>
 </html>
 """
@@ -179,10 +176,10 @@ def home(posts):
         f'<li><span><time datetime="{p.date.isoformat()}">{p.pretty_date}</time></span><a href="{p.url}">{esc(p.title)}</a></li>\n'
         for p in posts
     )
-    book_rows = "".join(f'<li><span>{esc(b.get("year", ""))}</span><a href="/books/">{esc(b["title"])}</a></li>\n' for b in books())
+    book_rows = "".join(f'<li><span>{esc(b.get("year", ""))}</span><a href="{book_url(b)}">{esc(b["title"])}</a></li>\n' for b in books())
     book_list = f'<h2>books</h2>\n<ul class="blog-posts">\n{book_rows}</ul>' if book_rows else ""
     body = f"""<main>
-<p>i write about the things i build and what broke.</p>
+<p class="intro">i write about the things i build and what broke.</p>
 <div class="skills">
 <p><b>good at</b> {GOOD_AT}</p>
 <p><b>languages</b> {LANGUAGES}</p>
@@ -252,9 +249,10 @@ def books_page():
         cover = f'<img class="cover" src="{b["cover"]}" alt="cover of {esc(b["title"])}" loading="lazy">' if b.get("cover") else ""
         subtitle = f'<p class="note"><em>{esc(b["subtitle"])}</em></p>' if b.get("subtitle") else ""
         links = ""
+        if b.get("read"):
+            links += f'<a href="{book_url(b)}">read it here</a>'
         if b.get("pdf"):
             links += f'<a href="{b["pdf"]}" download>download the pdf ({size_of(b["pdf"])})</a>'
-            links += f'<a href="{b["pdf"]}">read it here</a>'
         if b.get("url"):
             links += f'<a href="{b["url"]}">{esc(b.get("linkText", "more"))}</a>'
         items.append(f"""<div class="book">
@@ -275,6 +273,66 @@ def books_page():
         title="books", description=entries[0]["blurb"], path="/books/", body=body, nav="/books/",
         og_image=entries[0].get("cover", DEFAULT_OG),
     ))
+
+
+def book_url(b):
+    return f"/books/{b['read']}/" if b.get("read") else "/books/"
+
+
+def chapters_of(book):
+    path = CONTENT / "books" / book["read"] / "chapters.json" if book.get("read") else None
+    return json.loads(path.read_text(encoding="utf-8")) if path and path.exists() else []
+
+
+def reader_pages(book):
+    """the book as web pages: a contents page, then one page per chapter"""
+    chapters = chapters_of(book)
+    if not chapters:
+        return []
+    base = book_url(book)
+    toc = "".join(
+        f'<li><a href="{base}{c["slug"]}/"><span class="k">{esc(c["kicker"].lower())}</span><span class="t">{esc(c["title"])}</span></a></li>'
+        for c in chapters
+    )
+    note = f'<p class="book-note">{esc(book["note"])}</p>' if book.get("note") else ""
+    pdf = f'<a href="{book["pdf"]}" download>download the pdf ({size_of(book["pdf"])})</a>' if book.get("pdf") else ""
+    body = f"""<main class="book-home">
+<div class="book-hero">
+<img class="cover" src="{book["cover"]}" alt="cover of {esc(book["title"])}">
+<div>
+<p class="kicker">{book.get("pages", "")} pages · {len(chapters)} chapters</p>
+<h1>{esc(book["title"])}</h1>
+<p class="subtitle">{esc(book.get("subtitle", ""))}</p>
+<p class="actions"><a class="button" href="{base}{chapters[0]["slug"]}/">start reading</a>{pdf}</p>
+</div>
+</div>
+{note}
+<h2>contents</h2>
+<ol class="toc">{toc}</ol>
+</main>"""
+    write(base, layout(title=book["title"], description=book["blurb"], path=base, body=body, nav="/books/", og_image=book.get("cover", DEFAULT_OG)))
+
+    urls = [base]
+    for i, c in enumerate(chapters):
+        url = f"{base}{c['slug']}/"
+        urls.append(url)
+        prev = chapters[i - 1] if i else None
+        nxt = chapters[i + 1] if i + 1 < len(chapters) else None
+        pager = (f'<a class="prev" href="{base}{prev["slug"]}/"><small>previous</small>{esc(prev["title"])}</a>' if prev
+                 else f'<a class="prev" href="{base}"><small>back to</small>contents</a>')
+        if nxt:
+            pager += f'<a class="next" href="{base}{nxt["slug"]}/"><small>next</small>{esc(nxt["title"])}</a>'
+        body = f"""<main class="reader">
+<p class="crumbs"><a href="{base}">{esc(book["title"])}</a><span>{esc(c["kicker"].lower())}</span></p>
+<h1>{esc(c["title"])}</h1>
+<article class="prose book-prose">
+{c["html"]}
+</article>
+<nav class="pager">{pager}</nav>
+</main>"""
+        write(url, layout(title=f'{c["title"]} · {book["title"]}', description=f'{c["kicker"]} of {book["title"]}: {c["title"]}.',
+                          path=url, body=body, nav="/books/", og_image=book.get("cover", DEFAULT_OG)))
+    return urls
 
 
 def not_found():
@@ -303,8 +361,8 @@ def feed(posts):
 """)
 
 
-def sitemap(posts):
-    urls = ["/", "/papers/"] + (["/books/"] if books() else []) + [p.url for p in posts]
+def sitemap(posts, extra=()):
+    urls = ["/", "/papers/"] + (["/books/"] if books() else []) + [p.url for p in posts] + list(extra)
     body = "".join(f"<url><loc>{SITE}{u}</loc></url>\n" for u in urls)
     write("/sitemap.xml", f'<?xml version="1.0" encoding="utf-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n{body}</urlset>\n')
     write("/robots.txt", f"User-agent: *\nAllow: /\nSitemap: {SITE}/sitemap.xml\n")
@@ -319,9 +377,10 @@ def main():
         article(post, posts)
     papers_page()
     books_page()
+    reader_urls = [u for b in books() for u in reader_pages(b)]
     not_found()
     feed(posts)
-    sitemap(posts)
+    sitemap(posts, reader_urls)
     print(f"built {len(posts)} posts into {DIST.name}/")
 
 
