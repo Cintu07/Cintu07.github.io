@@ -1,6 +1,6 @@
-"""Builds the site from content/ into the repo root, which is what GitHub Pages serves.
+"""Builds the site from content/ into dist/, which the pages workflow deploys.
 
-    pip install markdown pygments
+    pip install -r requirements.txt
     python build.py
 """
 
@@ -16,13 +16,14 @@ import markdown
 
 ROOT = Path(__file__).parent
 CONTENT = ROOT / "content"
+DIST = ROOT / "dist"
 SITE = "https://cintu07.github.io"
 NAME = "pawan"
-TAGLINE = "long posts on inference, distributed systems and the bugs in between."
+TAGLINE = "long posts on ml infra, databases and inference, and the bugs in between."
+GOOD_AT = "ml infra, databases, inference"
+LANGUAGES = "rust, go, typescript"
 DEFAULT_OG = "/assets/img/og.png"
 WORDS_PER_MINUTE = 225
-
-GENERATED = ["posts", "papers", "books"]
 
 
 def frontmatter(text):
@@ -45,11 +46,11 @@ class Post:
         self.cover = meta.get("cover", "")
         self.url = f"/posts/{self.slug}/"
         self.minutes = max(1, round(len(body.split()) / WORDS_PER_MINUTE))
-        self.standfirst, self.html = render(body, self.description)
+        self.standfirst, self.html = render(body)
 
     @property
     def pretty_date(self):
-        return self.date.strftime("%b %d, %Y").lower()
+        return self.date.strftime("%d %b, %Y").lower()
 
 
 def inline(text):
@@ -61,20 +62,18 @@ def inline(text):
 LEADING_QUOTE = re.compile(r"\A((?:>.*\n?)+)\n*")
 
 
-def render(body, description):
+def render(body):
     standfirst = None
     quote = LEADING_QUOTE.match(body)
     if quote:
         lines = [line.removeprefix(">").strip() for line in quote.group(1).splitlines()]
         standfirst = inline(" ".join(lines))
         body = body[quote.end():]
-    if standfirst is None:
-        standfirst = html.escape(description)
 
     md = markdown.Markdown(
         extensions=["fenced_code", "tables", "sane_lists", "attr_list", "toc", "codehilite"],
         extension_configs={
-            "toc": {"permalink": "#", "permalink_class": "anchor", "toc_depth": "2-3"},
+            "toc": {"toc_depth": "2-3"},
             "codehilite": {"css_class": "hl", "guess_lang": False},
         },
     )
@@ -92,7 +91,23 @@ def esc(text):
     return html.escape(text, quote=True)
 
 
-def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=None, progress=False):
+def nav_items():
+    items = [("/", "writing"), ("/papers/", "papers")]
+    if books():
+        items.append(("/books/", "books"))
+    items.append(("https://pawann.dev", "pawann.dev"))
+    return items
+
+
+def books():
+    return json.loads((CONTENT / "books.json").read_text(encoding="utf-8"))
+
+
+def papers():
+    return json.loads((CONTENT / "papers.json").read_text(encoding="utf-8"))
+
+
+def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=None):
     full_title = NAME if path == "/" else f"{title} · {NAME}"
     canonical = SITE + path
     og = og_image if og_image.startswith("http") else SITE + og_image
@@ -108,7 +123,7 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
         ld["datePublished"] = article.date.isoformat()
         ld["image"] = og
     links = "".join(
-        f'<a href="{href}"{" aria-current=\"page\"" if href == nav else ""}>{label}</a>'
+        '<a href="{}"{}>{}</a>'.format(href, ' aria-current="page"' if href == nav else "", label)
         for href, label in nav_items()
     )
     return f"""<!doctype html>
@@ -123,7 +138,7 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
 <link rel="canonical" href="{canonical}">
 <link rel="alternate" type="application/rss+xml" title="{NAME}" href="/feed.xml">
 <link rel="icon" href="https://github.com/Cintu07.png">
-<link rel="preload" href="/assets/fonts/fraunces.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/et-book-roman.woff2" as="font" type="font/woff2" crossorigin>
 <meta property="og:site_name" content="{NAME}">
 <meta property="og:type" content="{"article" if article else "website"}">
 <meta property="og:title" content="{esc(title if article else NAME)}">
@@ -135,42 +150,22 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
 <script type="application/ld+json">{json.dumps(ld)}</script>
 </head>
 <body>
-{'<div class="progress" aria-hidden="true"></div>' if progress else ""}
-<div class="wrap{" wide" if nav == "/" else ""}">
-<header class="mast">
-<a class="logo" href="/">{NAME}</a>
-<nav class="nav">{links}</nav>
+<header>
+<a class="title" href="/">{NAME}</a>
+<nav>{links}</nav>
 </header>
 {body}
-<footer class="foot">
-<span>set in fraunces and geist mono. no trackers, no cookies.</span>
-<nav><a href="https://github.com/Cintu07">github</a><a href="https://pawann.dev">pawann.dev</a><a href="/feed.xml">rss</a></nav>
+<footer>
+<span>set in et book. no trackers, no cookies, no javascript.</span>
+<nav><a href="https://github.com/Cintu07">github</a><a href="/feed.xml">rss</a></nav>
 </footer>
-</div>
-<script src="/assets/site.js" defer></script>
 </body>
 </html>
 """
 
 
-def nav_items():
-    items = [("/", "writing"), ("/papers/", "papers")]
-    if books():
-        items.append(("/books/", "books"))
-    items.append(("https://pawann.dev", "pawann.dev ↗"))
-    return items
-
-
-def books():
-    return json.loads((CONTENT / "books.json").read_text(encoding="utf-8"))
-
-
-def papers():
-    return json.loads((CONTENT / "papers.json").read_text(encoding="utf-8"))
-
-
 def write(path, text):
-    target = ROOT / path.lstrip("/")
+    target = DIST / path.lstrip("/")
     if target.suffix == "":
         target = target / "index.html"
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -178,69 +173,61 @@ def write(path, text):
 
 
 def home(posts):
-    rows = []
-    for i, p in enumerate(posts, 1):
-        thumb = f'<img class="thumb" src="{p.cover}" alt="" loading="lazy">' if p.cover else "<span></span>"
-        rows.append(f"""<article class="entry">
-<span class="no">{i:02d}</span>
-<div>
-<h2><a href="{p.url}">{esc(p.title)}</a></h2>
-<p class="desc">{esc(p.description)}</p>
-<div class="meta"><span>{p.pretty_date}</span><span>{p.minutes} min read</span><span>{esc(", ".join(p.tags[:3]))}</span></div>
+    rows = "".join(
+        f'<li><span><time datetime="{p.date.isoformat()}">{p.pretty_date}</time></span><a href="{p.url}">{esc(p.title)}</a></li>\n'
+        for p in posts
+    )
+    body = f"""<main>
+<p>i write about the things i build and what broke.</p>
+<div class="skills">
+<p><b>good at</b> {GOOD_AT}</p>
+<p><b>languages</b> {LANGUAGES}</p>
 </div>
-{thumb}
-</article>""")
-    body = f"""<section class="hero">
-<p class="kicker">notes / pawan kalyan</p>
-<h1>things i built, and <em>what broke.</em></h1>
-<p>{TAGLINE}</p>
-</section>
-<main>{"".join(rows)}</main>"""
+<h2>writing</h2>
+<ul class="blog-posts">
+{rows}</ul>
+</main>"""
     write("/index.html", layout(title=NAME, description=TAGLINE, path="/", body=body, nav="/"))
 
 
 def article(post, posts):
-    cover = f'<img class="cover" src="{post.cover}" alt="">' if post.cover else ""
+    standfirst = f'<div class="standfirst"><p>{post.standfirst}</p></div>' if post.standfirst else ""
+    tags = f'<p class="tags">{esc(", ".join(post.tags))}</p>' if post.tags else ""
     others = [p for p in posts if p is not post]
     more = ""
     if others:
-        links = "".join(
-            f'<a href="{p.url}">{esc(p.title)}<span>{p.pretty_date}</span></a>' for p in others
-        )
+        links = "".join(f'<p><a href="{p.url}">{esc(p.title)}</a></p>' for p in others)
         more = f'<section class="more"><h2>more writing</h2>{links}</section>'
     body = f"""<main>
-<header class="post-head">
 <h1>{esc(post.title)}</h1>
-<div class="standfirst"><p>{post.standfirst}</p></div>
-<div class="meta"><span>{post.pretty_date}</span><span>{post.minutes} min read</span><span>{esc(", ".join(post.tags))}</span></div>
-</header>
-{cover}
+<p class="byline"><span><time datetime="{post.date.isoformat()}">{post.pretty_date}</time></span><span>{post.minutes} min read</span></p>
+{standfirst}
 <article class="prose">
 {post.html}
 </article>
+{tags}
 {more}
 </main>"""
     write(post.url, layout(
         title=post.title, description=post.description, path=post.url, body=body, nav="/",
-        og_image=post.cover or DEFAULT_OG, article=post, progress=True,
+        og_image=post.cover or DEFAULT_OG, article=post,
     ))
 
 
 def papers_page():
     items = []
     for p in papers():
-        links = [f'<a href="{p["url"]}">read the paper ↗</a>', f'<a href="{p["code"]}">{esc(p["codeName"])} on github ↗</a>']
-        items.append(f"""<article class="item">
+        items.append(f"""<div class="item">
 <h2><a href="{p["url"]}">{esc(p["title"])}</a></h2>
-<p class="by">{esc(p["authors"])} · {esc(p["venue"])}</p>
+<p class="by">{esc(p["authors"])}, {esc(p["venue"])}</p>
 <p class="note">{esc(p["note"])}</p>
-<div class="links">{"".join(links)}</div>
-</article>""")
-    body = f"""<header class="page-head">
-<h1>papers i <em>implement.</em></h1>
-<p>the ones i read with an editor open. each links to the code.</p>
-</header>
-<main>{"".join(items)}</main>"""
+<p class="links"><a href="{p["url"]}">paper</a><a href="{p["code"]}">{esc(p["codeName"])} on github</a></p>
+</div>""")
+    body = f"""<main>
+<h1>papers i implement</h1>
+<p class="byline">the ones i read with an editor open. each links to the code.</p>
+{"".join(items)}
+</main>"""
     write("/papers/", layout(title="papers", description="research papers i implement, with the code.", path="/papers/", body=body, nav="/papers/"))
 
 
@@ -250,23 +237,23 @@ def books_page():
         return
     items = []
     for b in entries:
-        by = " · ".join(x for x in (b.get("status", ""), b.get("year", "")) if x)
-        link = f'<div class="links"><a href="{b["url"]}">{esc(b.get("linkText", "read it"))} ↗</a></div>' if b.get("url") else ""
-        items.append(f"""<article class="item">
+        by = ", ".join(x for x in (b.get("status", ""), b.get("year", "")) if x)
+        link = f'<p class="links"><a href="{b["url"]}">{esc(b.get("linkText", "read it"))}</a></p>' if b.get("url") else ""
+        items.append(f"""<div class="item">
 <h2>{esc(b["title"])}</h2>
 <p class="by">{esc(by)}</p>
 <p class="note">{esc(b["blurb"])}</p>
 {link}
-</article>""")
-    body = f"""<header class="page-head">
-<h1>books i <em>write.</em></h1>
-</header>
-<main>{"".join(items)}</main>"""
+</div>""")
+    body = f"""<main>
+<h1>books i write</h1>
+{"".join(items)}
+</main>"""
     write("/books/", layout(title="books", description="books by pawan kalyan.", path="/books/", body=body, nav="/books/"))
 
 
 def not_found():
-    body = """<main class="nf"><h1>404</h1><p>nothing here. <a href="/" style="color:var(--gold)">back to the writing</a>.</p></main>"""
+    body = """<main class="nf"><h1>404</h1><p>nothing here. <a href="/">back to the writing</a>.</p></main>"""
     write("/404.html", layout(title="not found", description="page not found.", path="/404.html", body=body, nav=""))
 
 
@@ -299,8 +286,8 @@ def sitemap(posts):
 
 
 def main():
-    for name in GENERATED:
-        shutil.rmtree(ROOT / name, ignore_errors=True)
+    shutil.rmtree(DIST, ignore_errors=True)
+    shutil.copytree(ROOT / "assets", DIST / "assets")
     posts = sorted((Post(p) for p in (CONTENT / "posts").glob("*.md")), key=lambda p: p.date, reverse=True)
     home(posts)
     for post in posts:
@@ -310,8 +297,7 @@ def main():
     not_found()
     feed(posts)
     sitemap(posts)
-    (ROOT / ".nojekyll").write_text("", encoding="utf-8")
-    print(f"built {len(posts)} posts")
+    print(f"built {len(posts)} posts into {DIST.name}/")
 
 
 if __name__ == "__main__":
