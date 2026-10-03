@@ -22,7 +22,8 @@ NAME = "pawan"
 TAGLINE = "long posts on ml infra, databases and inference, and the bugs in between."
 GOOD_AT = "ml infra, databases, inference"
 LANGUAGES = "rust, go, typescript"
-DEFAULT_OG = "/assets/img/og.png"
+SITE_OG = "/assets/og/site.png"
+DEFAULT_OG = SITE_OG
 WORDS_PER_MINUTE = 225
 
 
@@ -45,6 +46,7 @@ class Post:
         self.tags = [t.strip().lower() for t in meta.get("tags", "").split(",") if t.strip()]
         self.cover = meta.get("cover", "")
         self.url = f"/posts/{self.slug}/"
+        self.og = f"/assets/og/{self.slug}.png"
         self.minutes = max(1, round(len(body.split()) / WORDS_PER_MINUTE))
         self.standfirst, self.html = render(body)
 
@@ -116,6 +118,11 @@ def books():
 
 def papers():
     return json.loads((CONTENT / "papers.json").read_text(encoding="utf-8"))
+
+
+def favourites():
+    path = CONTENT / "favourites.json"
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
 
 
 def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=None):
@@ -236,6 +243,63 @@ def books_page(entries):
                             og_image=entries[0].get("cover", DEFAULT_OG)))
 
 
+# ---------------------------------------------------------------- link previews
+
+OG_DIR = ROOT / "og"
+INK = (63 / 255, 46 / 255, 7 / 255)
+FAINT = (138 / 255, 111 / 255, 42 / 255)
+
+
+def wrap(font, text, size, width):
+    lines, line = [], ""
+    for word in text.split():
+        trial = f"{line} {word}".strip()
+        if line and font.text_length(trial, fontsize=size) > width:
+            lines.append(line)
+            line = word
+        else:
+            line = trial
+    return lines + [line] if line else lines
+
+
+def og_card(target, *, title, kicker="", footer="", title_size=(72, 40), max_lines=4):
+    """the 1200x630 picture a link unfurls into on x, linkedin, slack and imessage.
+    et book on the beige background, the pagoda faded in on the right."""
+    import pymupdf
+
+    roman = pymupdf.Font(fontfile=str(OG_DIR / "et-book-roman.ttf"))
+    doc = pymupdf.open()
+    page = doc.new_page(width=1200, height=630)
+    page.insert_image(page.rect, filename=str(OG_DIR / "background.png"))
+    big, small = pymupdf.TextWriter(page.rect), pymupdf.TextWriter(page.rect)
+
+    size = title_size[0]
+    while (lines := wrap(roman, title, size, 640)) and len(lines) > max_lines and size > title_size[1]:
+        size -= 4
+    lines = lines[:max_lines]
+    leading = size * 1.08
+    top = 315 - leading * len(lines) / 2 + size * 0.75
+    for i, line in enumerate(lines):
+        big.append((84, top + i * leading), line, font=roman, fontsize=size)
+    if kicker:
+        small.append((86, 118), kicker, font=roman, fontsize=28)
+    if footer:
+        small.append((86, 548), footer, font=roman, fontsize=26)
+    big.write_text(page, color=INK)
+    small.write_text(page, color=FAINT)
+
+    target = DIST / target.lstrip("/")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    page.get_pixmap(dpi=72).save(target)
+
+
+def og_cards(posts):
+    og_card(SITE_OG, title=NAME, footer=f"{GOOD_AT}  ·  {LANGUAGES}", title_size=(150, 150), max_lines=1)
+    for p in posts:
+        og_card(p.og, title=p.title.lower(), kicker=f"{NAME}  ·  writing",
+                footer=f"{SITE.removeprefix('https://')}  ·  {p.minutes} min read  ·  {p.pretty_date}")
+
+
 # ---------------------------------------------------------------- pages
 
 def home(posts, entries):
@@ -247,6 +311,17 @@ def home(posts, entries):
         f'<li><a href="{p["url"]}"><span class="t">{esc(p["title"])}</span><span class="d">{esc(p["codeName"])}</span></a></li>\n'
         for p in papers()
     )
+    fav_rows = "".join(
+        f'<li><a href="{p["url"]}"><span class="t">{esc(p["title"])}</span><span class="d">{esc(p["venue"].rsplit(", ", 1)[-1])}</span></a></li>\n'
+        for p in favourites()
+    )
+    fav_html = ""
+    if fav_rows:
+        fav_html = f"""<section>
+<h2 class="label"><a href="/papers/#favourites">papers i love</a> <span>{len(favourites())}</span></h2>
+<ul class="rows">
+{fav_rows}</ul>
+</section>"""
     books_html = ""
     if entries:
         books_html = f"""<section>
@@ -272,6 +347,7 @@ def home(posts, entries):
 <ul class="rows">
 {paper_rows}</ul>
 </section>
+{fav_html}
 </main>"""
     write("/index.html", layout(title=NAME, description=TAGLINE, path="/", body=body, nav="/"))
 
@@ -296,7 +372,7 @@ def article(post, posts):
 </main>"""
     write(post.url, layout(
         title=post.title, description=post.description, path=post.url, body=body, nav="/",
-        og_image=post.cover or DEFAULT_OG, article=post,
+        og_image=post.cover or post.og, article=post,
     ))
 
 
@@ -309,10 +385,23 @@ def papers_page():
 <p class="note">{esc(p["note"])}</p>
 <p class="links"><a href="{p["url"]}">the paper</a><a href="{p["code"]}">{esc(p["codeName"])}, the code</a></p>
 </div>""")
+    loved = []
+    for p in favourites():
+        loved.append(f"""<div class="item">
+<h2><a href="{p["url"]}">{esc(p["title"])}</a></h2>
+<p class="by">{esc(p["authors"])}, {esc(p["venue"])}</p>
+<p class="note">{esc(p["note"])}</p>
+</div>""")
+    fav_html = ""
+    if loved:
+        fav_html = f"""<h1 id="favourites" class="second">papers i love</h1>
+<p class="lede-small">not mine, just the ones i keep going back to.</p>
+{"".join(loved)}"""
     body = f"""<main>
 <h1>papers i implement</h1>
 <p class="lede-small">the ones i read with an editor open. each links to the code.</p>
 {"".join(items)}
+{fav_html}
 </main>"""
     write("/papers/", layout(title="papers", description="research papers i implement, with the code.", path="/papers/", body=body, nav="/papers/"))
 
@@ -359,6 +448,7 @@ def posts_json(posts):
             "description": p.description,
             "tags": p.tags,
             "cover": absolute(p.cover) if p.cover else "",
+            "og": absolute(p.cover or p.og),
             "minutes": p.minutes,
             "url": SITE + p.url,
             "markdown": body,
@@ -378,6 +468,7 @@ def main():
     shutil.copytree(ROOT / "assets", DIST / "assets")
     posts = sorted((Post(p) for p in (CONTENT / "posts").glob("*.md")), key=lambda p: p.date, reverse=True)
     entries = [prepare_book(b) for b in books()]
+    og_cards(posts)
     home(posts, entries)
     for post in posts:
         article(post, posts)

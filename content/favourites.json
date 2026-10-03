@@ -1,0 +1,9 @@
+[
+  {
+    "title": "Equality Saturation: A New Approach to Optimization",
+    "authors": "Ross Tate, Michael Stepp, Zachary Tatlock, Sorin Lerner",
+    "venue": "Logical Methods in Computer Science, 2011",
+    "url": "https://arxiv.org/abs/1012.1802",
+    "note": "a compiler usually rewrites the program pass by pass, and every pass throws away the version before it, so the order of the passes decides what you end up with. this paper keeps every equal version at once in one graph, and picks the best one at the end. no pass order to get wrong. it is the idea under e-graphs and egg."
+  }
+]
