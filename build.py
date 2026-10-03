@@ -64,10 +64,20 @@ def inline(text):
 LEADING_QUOTE = re.compile(r"\A((?:>.*\n?)+)\n*")
 
 
+def svg_size(src):
+    """width and height from an svg's viewBox, so the page keeps the room for it while it loads"""
+    path = ROOT / src.lstrip("/")
+    if src.endswith(".svg") and path.is_file():
+        m = re.search(r'viewBox="[\d.\-]+ [\d.\-]+ ([\d.]+) ([\d.]+)"', path.read_text(encoding="utf-8")[:2000])
+        if m:
+            return f' width="{round(float(m.group(1)))}" height="{round(float(m.group(2)))}"'
+    return ""
+
+
 def figure(m):
     alt, src = m.group(1), m.group(2)
     caption = f"<figcaption>{alt}</figcaption>" if alt.strip() else ""
-    return f'<figure><img src="{src}" alt="{alt}" loading="lazy">{caption}</figure>'
+    return f'<figure><img src="{src}" alt="{alt}"{svg_size(src)} loading="lazy">{caption}</figure>'
 
 
 def render(body):
@@ -151,13 +161,14 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
-<meta name="theme-color" content="#f8f4ea">
+<meta name="theme-color" content="#ffffff">
 <title>{esc(full_title.lower())}</title>
 <meta name="description" content="{esc(description)}">
 <link rel="canonical" href="{canonical}">
 <link rel="alternate" type="application/rss+xml" title="{NAME}" href="/feed.xml">
 <link rel="icon" href="/assets/img/icon.png">
 <link rel="preload" href="/assets/fonts/et-book-roman.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/virgil.woff2" as="font" type="font/woff2" crossorigin>
 <meta property="og:site_name" content="{NAME}">
 <meta property="og:type" content="{"article" if article else "website"}">
 <meta property="og:title" content="{esc((title if article else NAME).lower())}">
@@ -246,8 +257,9 @@ def books_page(entries):
 # ---------------------------------------------------------------- link previews
 
 OG_DIR = ROOT / "og"
-INK = (63 / 255, 46 / 255, 7 / 255)
-FAINT = (138 / 255, 111 / 255, 42 / 255)
+INK = (30 / 255, 30 / 255, 30 / 255)
+FAINT = (108 / 255, 115 / 255, 122 / 255)
+BLUE = (25 / 255, 113 / 255, 194 / 255)
 
 
 def wrap(font, text, size, width):
@@ -262,16 +274,16 @@ def wrap(font, text, size, width):
     return lines + [line] if line else lines
 
 
-def og_card(target, *, title, kicker="", footer="", title_size=(72, 40), max_lines=4):
+def og_card(target, *, title, kicker="", footer="", title_size=(64, 36), max_lines=4):
     """the 1200x630 picture a link unfurls into on x, linkedin, slack and imessage.
-    et book on the beige background, the pagoda faded in on the right."""
+    virgil on white, the pagoda faded in on the right."""
     import pymupdf
 
-    roman = pymupdf.Font(fontfile=str(OG_DIR / "et-book-roman.ttf"))
+    roman = pymupdf.Font(fontfile=str(OG_DIR / "virgil.ttf"))
     doc = pymupdf.open()
     page = doc.new_page(width=1200, height=630)
     page.insert_image(page.rect, filename=str(OG_DIR / "background.png"))
-    big, small = pymupdf.TextWriter(page.rect), pymupdf.TextWriter(page.rect)
+    big, small, accent = pymupdf.TextWriter(page.rect), pymupdf.TextWriter(page.rect), pymupdf.TextWriter(page.rect)
 
     size = title_size[0]
     while (lines := wrap(roman, title, size, 640)) and len(lines) > max_lines and size > title_size[1]:
@@ -282,11 +294,12 @@ def og_card(target, *, title, kicker="", footer="", title_size=(72, 40), max_lin
     for i, line in enumerate(lines):
         big.append((84, top + i * leading), line, font=roman, fontsize=size)
     if kicker:
-        small.append((86, 118), kicker, font=roman, fontsize=28)
+        accent.append((86, 118), kicker, font=roman, fontsize=28)
     if footer:
         small.append((86, 548), footer, font=roman, fontsize=26)
     big.write_text(page, color=INK)
     small.write_text(page, color=FAINT)
+    accent.write_text(page, color=BLUE)
 
     target = DIST / target.lstrip("/")
     target.parent.mkdir(parents=True, exist_ok=True)
