@@ -62,6 +62,12 @@ def inline(text):
 LEADING_QUOTE = re.compile(r"\A((?:>.*\n?)+)\n*")
 
 
+def figure(m):
+    alt, src = m.group(1), m.group(2)
+    caption = f"<figcaption>{alt}</figcaption>" if alt.strip() else ""
+    return f'<figure><img src="{src}" alt="{alt}" loading="lazy">{caption}</figure>'
+
+
 def render(body):
     standfirst = None
     quote = LEADING_QUOTE.match(body)
@@ -78,11 +84,7 @@ def render(body):
         },
     )
     out = md.convert(body)
-    out = re.sub(
-        r'<p><img alt="([^"]*)" src="([^"]*)" ?/></p>',
-        r'<figure><img src="\2" alt="\1" loading="lazy"><figcaption>\1</figcaption></figure>',
-        out,
-    )
+    out = re.sub(r'<p><img alt="([^"]*)" src="([^"]*)" ?/></p>', figure, out)
     out = re.sub(r"(<table>.*?</table>)", r'<div class="table-wrap">\1</div>', out, flags=re.S)
     return standfirst, out
 
@@ -137,7 +139,7 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
 <meta name="description" content="{esc(description)}">
 <link rel="canonical" href="{canonical}">
 <link rel="alternate" type="application/rss+xml" title="{NAME}" href="/feed.xml">
-<link rel="icon" href="https://github.com/Cintu07.png">
+<link rel="icon" href="/assets/img/icon.png">
 <link rel="preload" href="/assets/fonts/et-book-roman.woff2" as="font" type="font/woff2" crossorigin>
 <meta property="og:site_name" content="{NAME}">
 <meta property="og:type" content="{"article" if article else "website"}">
@@ -157,7 +159,7 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
 {body}
 <footer>
 <span>set in et book. no trackers, no cookies, no javascript.</span>
-<nav><a href="https://github.com/Cintu07">github</a><a href="/feed.xml">rss</a></nav>
+<nav><a href="/feed.xml">rss</a></nav>
 </footer>
 </body>
 </html>
@@ -221,7 +223,7 @@ def papers_page():
 <h2><a href="{p["url"]}">{esc(p["title"])}</a></h2>
 <p class="by">{esc(p["authors"])}, {esc(p["venue"])}</p>
 <p class="note">{esc(p["note"])}</p>
-<p class="links"><a href="{p["url"]}">paper</a><a href="{p["code"]}">{esc(p["codeName"])} on github</a></p>
+<p class="links"><a href="{p["url"]}">paper</a><a href="{p["code"]}">{esc(p["codeName"])}, the code</a></p>
 </div>""")
     body = f"""<main>
 <h1>papers i implement</h1>
