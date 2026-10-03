@@ -93,6 +93,15 @@ def esc(text):
     return html.escape(text, quote=True)
 
 
+
+
+SOCIALS = [
+    ("x", "https://x.com/pawankalyandev"),
+    ("linkedin", "https://www.linkedin.com/in/pavankalyan-kolagani/"),
+    ("email", "mailto:pawankalyan1892@gmail.com"),
+]
+
+
 def nav_items():
     items = [("/", "writing"), ("/papers/", "papers")]
     if books():
@@ -128,6 +137,7 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
         '<a href="{}"{}>{}</a>'.format(href, ' aria-current="page"' if href == nav else "", label)
         for href, label in nav_items()
     )
+    socials = "".join(f'<a href="{href}"{"" if href.startswith("mailto:") else " rel=\"me noreferrer\""}>{label}</a>' for label, href in SOCIALS)
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -135,7 +145,7 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#f8f4ea">
-<title>{esc(full_title)}</title>
+<title>{esc(full_title.lower())}</title>
 <meta name="description" content="{esc(description)}">
 <link rel="canonical" href="{canonical}">
 <link rel="alternate" type="application/rss+xml" title="{NAME}" href="/feed.xml">
@@ -143,7 +153,7 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
 <link rel="preload" href="/assets/fonts/et-book-roman.woff2" as="font" type="font/woff2" crossorigin>
 <meta property="og:site_name" content="{NAME}">
 <meta property="og:type" content="{"article" if article else "website"}">
-<meta property="og:title" content="{esc(title if article else NAME)}">
+<meta property="og:title" content="{esc((title if article else NAME).lower())}">
 <meta property="og:description" content="{esc(description)}">
 <meta property="og:url" content="{canonical}">
 <meta property="og:image" content="{og}">
@@ -157,7 +167,7 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
 <nav>{links}</nav>
 </header>
 {body}
-<footer><span>pawan kalyan</span><span>{datetime.date.today().year}</span></footer>
+<footer><span>pawan kalyan</span><nav>{socials}</nav></footer>
 </body>
 </html>
 """
@@ -171,23 +181,97 @@ def write(path, text):
     target.write_text(text, encoding="utf-8", newline="\n")
 
 
-def home(posts):
+# ---------------------------------------------------------------- books
+
+def size_of(path):
+    n = (ROOT / path.lstrip("/")).stat().st_size
+    return f"{n / 1_000_000:.1f} mb" if n >= 1_000_000 else f"{round(n / 1000)} kb"
+
+
+def prepare_book(b):
+    """books uploaded from the sandbox come with only a pdf. the cover is its
+    first page and the page count is read off the file."""
+    pdf = b.get("pdf")
+    if not pdf or (b.get("cover") and b.get("pages")):
+        return b
+    import pymupdf
+
+    doc = pymupdf.open(ROOT / pdf.lstrip("/"))
+    b = {**b, "pages": b.get("pages") or len(doc)}
+    if not b.get("cover"):
+        name = Path(pdf).stem + "-cover.jpg"
+        target = DIST / "assets" / "books" / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        doc[0].get_pixmap(dpi=100).save(target, jpg_quality=86)
+        b["cover"] = f"/assets/books/{name}"
+    return b
+
+
+def book_card(b, big=False):
+    meta = " · ".join(x for x in (b.get("year", ""), f'{b["pages"]} pages' if b.get("pages") else "", "free pdf") if x)
+    cover = f'<a href="{b["pdf"]}" download class="cover-link"><img class="cover" src="{b["cover"]}" alt="cover of {esc(b["title"])}" loading="lazy"></a>' if b.get("cover") else ""
+    blurb = f'<p class="note">{esc(b["blurb"])}</p>' if big and b.get("blurb") else ""
+    subtitle = f'<p class="subtitle">{esc(b["subtitle"])}</p>' if b.get("subtitle") else ""
+    return f"""<div class="book{" big" if big else ""}">
+{cover}
+<div>
+<h3>{esc(b["title"])}</h3>
+{subtitle}
+{blurb}
+<p class="meta">{esc(meta)}</p>
+<a class="button" href="{b["pdf"]}" download>download the pdf <span>{size_of(b["pdf"])}</span></a>
+</div>
+</div>"""
+
+
+def books_page(entries):
+    if not entries:
+        return
+    body = f"""<main>
+<h1>books i write</h1>
+<p class="lede-small">free to download, all of them.</p>
+{"".join(book_card(b, big=True) for b in entries)}
+</main>"""
+    write("/books/", layout(title="books", description=entries[0].get("blurb", ""), path="/books/", body=body, nav="/books/",
+                            og_image=entries[0].get("cover", DEFAULT_OG)))
+
+
+# ---------------------------------------------------------------- pages
+
+def home(posts, entries):
     rows = "".join(
-        f'<li><span><time datetime="{p.date.isoformat()}">{p.pretty_date}</time></span><a href="{p.url}">{esc(p.title)}</a></li>\n'
+        f'<li><a href="{p.url}"><span class="t">{esc(p.title)}</span><time datetime="{p.date.isoformat()}">{p.pretty_date}</time></a></li>\n'
         for p in posts
     )
-    book_rows = "".join(f'<li><span>{esc(b.get("year", ""))}</span><a href="{book_url(b)}">{esc(b["title"])}</a></li>\n' for b in books())
-    book_list = f'<h2>books</h2>\n<ul class="blog-posts">\n{book_rows}</ul>' if book_rows else ""
-    body = f"""<main>
-<p class="intro">i write about the things i build and what broke.</p>
-<div class="skills">
-<p><b>good at</b> {GOOD_AT}</p>
-<p><b>languages</b> {LANGUAGES}</p>
-</div>
-<h2>writing</h2>
-<ul class="blog-posts">
+    paper_rows = "".join(
+        f'<li><a href="{p["url"]}"><span class="t">{esc(p["title"])}</span><span class="d">{esc(p["codeName"])}</span></a></li>\n'
+        for p in papers()
+    )
+    books_html = ""
+    if entries:
+        books_html = f"""<section>
+<h2 class="label">books <span>{len(entries)}</span></h2>
+{"".join(book_card(b) for b in entries)}
+</section>"""
+    body = f"""<main class="home">
+<section class="hello">
+<p class="lede">i work on ml infra, databases and inference, and write down what breaks along the way.</p>
+<dl class="facts">
+<div><dt>good at</dt><dd>{GOOD_AT}</dd></div>
+<div><dt>languages</dt><dd>{LANGUAGES}</dd></div>
+</dl>
+</section>
+<section>
+<h2 class="label">writing <span>{len(posts)}</span></h2>
+<ul class="rows">
 {rows}</ul>
-{book_list}
+</section>
+{books_html}
+<section>
+<h2 class="label">papers i implement <span>{len(papers())}</span></h2>
+<ul class="rows">
+{paper_rows}</ul>
+</section>
 </main>"""
     write("/index.html", layout(title=NAME, description=TAGLINE, path="/", body=body, nav="/"))
 
@@ -198,8 +282,8 @@ def article(post, posts):
     others = [p for p in posts if p is not post]
     more = ""
     if others:
-        links = "".join(f'<p><a href="{p.url}">{esc(p.title)}</a></p>' for p in others)
-        more = f'<section class="more"><h2>more writing</h2>{links}</section>'
+        links = "".join(f'<li><a href="{p.url}"><span class="t">{esc(p.title)}</span><time>{p.pretty_date}</time></a></li>' for p in others)
+        more = f'<section class="more"><h2 class="label">more writing</h2><ul class="rows">{links}</ul></section>'
     body = f"""<main>
 <h1>{esc(post.title)}</h1>
 <p class="byline"><span><time datetime="{post.date.isoformat()}">{post.pretty_date}</time></span><span>{post.minutes} min read</span></p>
@@ -223,116 +307,14 @@ def papers_page():
 <h2><a href="{p["url"]}">{esc(p["title"])}</a></h2>
 <p class="by">{esc(p["authors"])}, {esc(p["venue"])}</p>
 <p class="note">{esc(p["note"])}</p>
-<p class="links"><a href="{p["url"]}">paper</a><a href="{p["code"]}">{esc(p["codeName"])}, the code</a></p>
+<p class="links"><a href="{p["url"]}">the paper</a><a href="{p["code"]}">{esc(p["codeName"])}, the code</a></p>
 </div>""")
     body = f"""<main>
 <h1>papers i implement</h1>
-<p class="byline">the ones i read with an editor open. each links to the code.</p>
+<p class="lede-small">the ones i read with an editor open. each links to the code.</p>
 {"".join(items)}
 </main>"""
     write("/papers/", layout(title="papers", description="research papers i implement, with the code.", path="/papers/", body=body, nav="/papers/"))
-
-
-def size_of(path):
-    n = (ROOT / path.lstrip("/")).stat().st_size
-    return f"{n / 1_000_000:.1f} MB" if n >= 1_000_000 else f"{round(n / 1000)} KB"
-
-
-def books_page():
-    entries = books()
-    if not entries:
-        return
-    items = []
-    for b in entries:
-        pages = f'{b["pages"]} pages' if b.get("pages") else ""
-        meta = " · ".join(x for x in (b.get("status", ""), b.get("year", ""), pages) if x)
-        cover = f'<img class="cover" src="{b["cover"]}" alt="cover of {esc(b["title"])}" loading="lazy">' if b.get("cover") else ""
-        subtitle = f'<p class="note"><em>{esc(b["subtitle"])}</em></p>' if b.get("subtitle") else ""
-        links = ""
-        if b.get("read"):
-            links += f'<a href="{book_url(b)}">read it here</a>'
-        if b.get("pdf"):
-            links += f'<a href="{b["pdf"]}" download>download the pdf ({size_of(b["pdf"])})</a>'
-        if b.get("url"):
-            links += f'<a href="{b["url"]}">{esc(b.get("linkText", "more"))}</a>'
-        items.append(f"""<div class="book">
-{cover}
-<div>
-<h2>{esc(b["title"])}</h2>
-<p class="by">{esc(meta)}</p>
-{subtitle}
-<p class="note">{esc(b["blurb"])}</p>
-<p class="links">{links}</p>
-</div>
-</div>""")
-    body = f"""<main>
-<h1>books i write</h1>
-{"".join(items)}
-</main>"""
-    write("/books/", layout(
-        title="books", description=entries[0]["blurb"], path="/books/", body=body, nav="/books/",
-        og_image=entries[0].get("cover", DEFAULT_OG),
-    ))
-
-
-def book_url(b):
-    return f"/books/{b['read']}/" if b.get("read") else "/books/"
-
-
-def chapters_of(book):
-    path = CONTENT / "books" / book["read"] / "chapters.json" if book.get("read") else None
-    return json.loads(path.read_text(encoding="utf-8")) if path and path.exists() else []
-
-
-def reader_pages(book):
-    """the book as web pages: a contents page, then one page per chapter"""
-    chapters = chapters_of(book)
-    if not chapters:
-        return []
-    base = book_url(book)
-    toc = "".join(
-        f'<li><a href="{base}{c["slug"]}/"><span class="k">{esc(c["kicker"].lower())}</span><span class="t">{esc(c["title"])}</span></a></li>'
-        for c in chapters
-    )
-    note = f'<p class="book-note">{esc(book["note"])}</p>' if book.get("note") else ""
-    pdf = f'<a href="{book["pdf"]}" download>download the pdf ({size_of(book["pdf"])})</a>' if book.get("pdf") else ""
-    body = f"""<main class="book-home">
-<div class="book-hero">
-<img class="cover" src="{book["cover"]}" alt="cover of {esc(book["title"])}">
-<div>
-<p class="kicker">{book.get("pages", "")} pages · {len(chapters)} chapters</p>
-<h1>{esc(book["title"])}</h1>
-<p class="subtitle">{esc(book.get("subtitle", ""))}</p>
-<p class="actions"><a class="button" href="{base}{chapters[0]["slug"]}/">start reading</a>{pdf}</p>
-</div>
-</div>
-{note}
-<h2>contents</h2>
-<ol class="toc">{toc}</ol>
-</main>"""
-    write(base, layout(title=book["title"], description=book["blurb"], path=base, body=body, nav="/books/", og_image=book.get("cover", DEFAULT_OG)))
-
-    urls = [base]
-    for i, c in enumerate(chapters):
-        url = f"{base}{c['slug']}/"
-        urls.append(url)
-        prev = chapters[i - 1] if i else None
-        nxt = chapters[i + 1] if i + 1 < len(chapters) else None
-        pager = (f'<a class="prev" href="{base}{prev["slug"]}/"><small>previous</small>{esc(prev["title"])}</a>' if prev
-                 else f'<a class="prev" href="{base}"><small>back to</small>contents</a>')
-        if nxt:
-            pager += f'<a class="next" href="{base}{nxt["slug"]}/"><small>next</small>{esc(nxt["title"])}</a>'
-        body = f"""<main class="reader">
-<p class="crumbs"><a href="{base}">{esc(book["title"])}</a><span>{esc(c["kicker"].lower())}</span></p>
-<h1>{esc(c["title"])}</h1>
-<article class="prose book-prose">
-{c["html"]}
-</article>
-<nav class="pager">{pager}</nav>
-</main>"""
-        write(url, layout(title=f'{c["title"]} · {book["title"]}', description=f'{c["kicker"]} of {book["title"]}: {c["title"]}.',
-                          path=url, body=body, nav="/books/", og_image=book.get("cover", DEFAULT_OG)))
-    return urls
 
 
 def not_found():
@@ -361,8 +343,8 @@ def feed(posts):
 """)
 
 
-def sitemap(posts, extra=()):
-    urls = ["/", "/papers/"] + (["/books/"] if books() else []) + [p.url for p in posts] + list(extra)
+def sitemap(posts, has_books):
+    urls = ["/", "/papers/"] + (["/books/"] if has_books else []) + [p.url for p in posts]
     body = "".join(f"<url><loc>{SITE}{u}</loc></url>\n" for u in urls)
     write("/sitemap.xml", f'<?xml version="1.0" encoding="utf-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n{body}</urlset>\n')
     write("/robots.txt", f"User-agent: *\nAllow: /\nSitemap: {SITE}/sitemap.xml\n")
@@ -372,16 +354,16 @@ def main():
     shutil.rmtree(DIST, ignore_errors=True)
     shutil.copytree(ROOT / "assets", DIST / "assets")
     posts = sorted((Post(p) for p in (CONTENT / "posts").glob("*.md")), key=lambda p: p.date, reverse=True)
-    home(posts)
+    entries = [prepare_book(b) for b in books()]
+    home(posts, entries)
     for post in posts:
         article(post, posts)
     papers_page()
-    books_page()
-    reader_urls = [u for b in books() for u in reader_pages(b)]
+    books_page(entries)
     not_found()
     feed(posts)
-    sitemap(posts, reader_urls)
-    print(f"built {len(posts)} posts into {DIST.name}/")
+    sitemap(posts, bool(entries))
+    print(f"built {len(posts)} posts and {len(entries)} books into {DIST.name}/")
 
 
 if __name__ == "__main__":
