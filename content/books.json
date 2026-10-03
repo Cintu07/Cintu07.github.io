@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "title": "Below the code",
+    "subtitle": "A working engineer's guide to assembly, from bits to GPU kernels: RISC-V, x86-64, SIMD, PTX and SASS.",
+    "blurb": "what the hardware does when your code runs, and what it costs. it starts at bits and the loop a cpu runs forever, teaches risc-v first because it is clean, then x86-64, simd and the cost model, and ends on how a gpu runs code and how to read ptx and sass. every program in it was assembled and run, and every compiler listing and benchmark number came from a real tool. one sass listing in chapter 15 could not be run, and the book says so.",
+    "status": "free pdf",
+    "year": "2026",
+    "pages": 129,
+    "cover": "/assets/img/below-the-code-cover.jpg",
+    "pdf": "/assets/books/below-the-code-assembly.pdf"
+  }
+]
