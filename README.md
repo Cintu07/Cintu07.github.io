@@ -22,13 +22,13 @@ a leading `>` quote becomes the standfirst under the title. without one, the des
 
 `content/papers.json` and `content/books.json`. a book has `title`, `blurb`, and optionally `status`, `year`, `url`, `linkText`. the books page and its nav link appear once the list is not empty.
 
-## building
+## building and deploying
 
 ```
-pip install markdown pygments
+pip install -r requirements.txt
 python build.py
 ```
 
-the generated pages sit in the repo root because that is what github pages serves. commit them with the source.
+that writes the site to `dist/`. pushing to `main` runs `.github/workflows/pages.yml`, which does the same build and deploys it, so only the sources live in git. a new file in `content/posts/` is a new post a minute after the push.
 
-set in [fraunces](https://github.com/undercasetype/Fraunces) and [geist mono](https://github.com/vercel/geist-font), both under the SIL open font license.
+set in [et book](https://github.com/edwardtufte/et-book), mit licensed. no javascript on the site.
