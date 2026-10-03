@@ -179,6 +179,8 @@ def home(posts):
         f'<li><span><time datetime="{p.date.isoformat()}">{p.pretty_date}</time></span><a href="{p.url}">{esc(p.title)}</a></li>\n'
         for p in posts
     )
+    book_rows = "".join(f'<li><span>{esc(b.get("year", ""))}</span><a href="/books/">{esc(b["title"])}</a></li>\n' for b in books())
+    book_list = f'<h2>books</h2>\n<ul class="blog-posts">\n{book_rows}</ul>' if book_rows else ""
     body = f"""<main>
 <p>i write about the things i build and what broke.</p>
 <div class="skills">
@@ -188,6 +190,7 @@ def home(posts):
 <h2>writing</h2>
 <ul class="blog-posts">
 {rows}</ul>
+{book_list}
 </main>"""
     write("/index.html", layout(title=NAME, description=TAGLINE, path="/", body=body, nav="/"))
 
@@ -233,25 +236,45 @@ def papers_page():
     write("/papers/", layout(title="papers", description="research papers i implement, with the code.", path="/papers/", body=body, nav="/papers/"))
 
 
+def size_of(path):
+    n = (ROOT / path.lstrip("/")).stat().st_size
+    return f"{n / 1_000_000:.1f} MB" if n >= 1_000_000 else f"{round(n / 1000)} KB"
+
+
 def books_page():
     entries = books()
     if not entries:
         return
     items = []
     for b in entries:
-        by = ", ".join(x for x in (b.get("status", ""), b.get("year", "")) if x)
-        link = f'<p class="links"><a href="{b["url"]}">{esc(b.get("linkText", "read it"))}</a></p>' if b.get("url") else ""
-        items.append(f"""<div class="item">
+        pages = f'{b["pages"]} pages' if b.get("pages") else ""
+        meta = " · ".join(x for x in (b.get("status", ""), b.get("year", ""), pages) if x)
+        cover = f'<img class="cover" src="{b["cover"]}" alt="cover of {esc(b["title"])}" loading="lazy">' if b.get("cover") else ""
+        subtitle = f'<p class="note"><em>{esc(b["subtitle"])}</em></p>' if b.get("subtitle") else ""
+        links = ""
+        if b.get("pdf"):
+            links += f'<a href="{b["pdf"]}" download>download the pdf ({size_of(b["pdf"])})</a>'
+            links += f'<a href="{b["pdf"]}">read it here</a>'
+        if b.get("url"):
+            links += f'<a href="{b["url"]}">{esc(b.get("linkText", "more"))}</a>'
+        items.append(f"""<div class="book">
+{cover}
+<div>
 <h2>{esc(b["title"])}</h2>
-<p class="by">{esc(by)}</p>
+<p class="by">{esc(meta)}</p>
+{subtitle}
 <p class="note">{esc(b["blurb"])}</p>
-{link}
+<p class="links">{links}</p>
+</div>
 </div>""")
     body = f"""<main>
 <h1>books i write</h1>
 {"".join(items)}
 </main>"""
-    write("/books/", layout(title="books", description="books by pawan kalyan.", path="/books/", body=body, nav="/books/"))
+    write("/books/", layout(
+        title="books", description=entries[0]["blurb"], path="/books/", body=body, nav="/books/",
+        og_image=entries[0].get("cover", DEFAULT_OG),
+    ))
 
 
 def not_found():
