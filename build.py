@@ -357,7 +357,7 @@ def art(name, eager=False):
     return f'<img class="{classes}" src="/assets/art/{name}.webp" width="{a["w"]}" height="{a["h"]}" alt=""{loading} decoding="async">'
 
 
-def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=None):
+def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=None, chrome=True):
     full_title = NAME if path == "/" else f"{title} · {NAME}"
     canonical = SITE + path
     og = og_image if og_image.startswith("http") else SITE + og_image
@@ -377,8 +377,18 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
         for href, label in nav_items()
     )
     music = player()
-    plinth = f'<div class="plinth">{art("frieze")}</div>' if art("frieze") else ""
     socials = "".join(f'<a href="{href}"{"" if href.startswith("mailto:") else " rel=\"me noreferrer\""}>{label}</a>' for label, href in SOCIALS)
+    plinth = f'<div class="plinth">{art("frieze")}</div>' if art("frieze") else ""
+    header_html = f"""<header>
+<a class="title" href="/">{NAME}</a>
+<nav>{links}{THEME_BUTTON}</nav>
+</header>
+""" if chrome else ""
+    footer_html = f"""<footer>
+<div class="foot"><span>pawan kalyan</span><nav>{socials}</nav></div>
+{plinth}
+</footer>
+""" if chrome else ""
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -406,16 +416,8 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
 <script type="application/ld+json">{json.dumps(ld)}</script>
 </head>
 <body{' class="has-music"' if music else ''}>
-<header>
-<a class="title" href="/">{NAME}</a>
-<nav>{links}{THEME_BUTTON}</nav>
-</header>
-{body}
-<footer>
-<div class="foot"><span>pawan kalyan</span><nav>{socials}</nav></div>
-{plinth}
-</footer>
-{music}<script>{NAV_JS}</script>
+{header_html}{body}
+{footer_html}{music}<script>{NAV_JS}</script>
 </body>
 </html>
 """
@@ -436,11 +438,31 @@ def size_of(path):
     return f"{n / 1_000_000:.1f} mb" if n >= 1_000_000 else f"{round(n / 1000)} kb"
 
 
+def wide_cover(page, dest):
+    """the top of the first page, cut to 16:9 and 1200 wide. it starts a little above the first thing
+    printed on the page, which is where a title is"""
+    import pymupdf
+
+    probe = page.get_pixmap(dpi=36)
+    first = 0
+    for y in range(probe.height):
+        if min(probe.samples[y * probe.stride:(y + 1) * probe.stride]) < 225:
+            first = y
+            break
+    width, tall = page.rect.width, page.rect.height
+    height = width * 9 / 16
+    top = min(max(0.0, first * width / probe.width - 0.05 * tall), max(0.0, tall - height))
+    k = 1200 / width
+    pix = page.get_pixmap(matrix=pymupdf.Matrix(k, k), clip=pymupdf.Rect(0, top, width, top + height))
+    pix.save(dest, jpg_quality=84)
+    return pix.width, pix.height
+
+
 def prepare_book(b):
     """books uploaded from the sandbox come with only a pdf. the cover is its
     first page and the page count is read off the file."""
     pdf = b.get("pdf")
-    if not pdf or (b.get("cover") and b.get("pages")):
+    if not pdf:
         return b
     import pymupdf
 
@@ -454,6 +476,11 @@ def prepare_book(b):
         pix.save(target, jpg_quality=86)
         b["cover"] = f"/assets/books/{name}"
         b["cover_size"] = (pix.width, pix.height)
+    # the banner is cut from the first page whether or not the book brought a cover of its own
+    wide = Path(pdf).stem + "-wide.jpg"
+    (DIST / "assets" / "books").mkdir(parents=True, exist_ok=True)
+    w, h = wide_cover(doc[0], DIST / "assets" / "books" / wide)
+    b["cover_wide"] = (f"/assets/books/{wide}", w, h)
     return b
 
 
@@ -461,7 +488,8 @@ def book_card(b, big=False):
     meta = " · ".join(x for x in (b.get("year", ""), f'{b["pages"]} pages' if b.get("pages") else "", "free pdf") if x)
     # the cover's size is known when it is made from the pdf, so the page keeps its room while it loads
     size = f' width="{b["cover_size"][0]}" height="{b["cover_size"][1]}"' if b.get("cover_size") else ""
-    cover = f'<a href="{b["pdf"]}" download class="cover-link"><img class="cover" src="{b["cover"]}" alt="cover of {esc(b["title"])}"{size} loading="lazy" decoding="async"></a>' if b.get("cover") else ""
+    wide = f'<source media="(max-width: 720px)" srcset="{b["cover_wide"][0]}" width="{b["cover_wide"][1]}" height="{b["cover_wide"][2]}">' if b.get("cover_wide") else ""
+    cover = f'<a href="{b["pdf"]}" download class="cover-link"><picture>{wide}<img class="cover" src="{b["cover"]}" alt="cover of {esc(b["title"])}"{size} loading="lazy" decoding="async"></picture></a>' if b.get("cover") else ""
     code = f'<a class="code-link" href="{b["code"]}" download>source code <span>{size_of(b["code"])}</span></a>' if b.get("code") else ""
     blurb = f'<p class="note">{esc(b["blurb"])}</p>' if big and b.get("blurb") else ""
     subtitle = f'<p class="subtitle">{esc(b["subtitle"])}</p>' if b.get("subtitle") else ""
@@ -615,7 +643,7 @@ def home(posts, entries):
     body = f"""<main class="home">
 <section class="hello">
 {art("falling", eager=True)}
-<p class="lede">i work on ml infra, databases and inference, and write down what breaks along the way.</p>
+<p class="lede">i'm pawan. i build database and inference stuff and break it a lot. this is where i write down why.</p>
 <dl class="facts">
 <div><dt>good at</dt><dd>{GOOD_AT}</dd></div>
 <div><dt>languages</dt><dd>{LANGUAGES}</dd></div>
@@ -696,7 +724,7 @@ def papers_page():
 
 def not_found():
     body = f"""<main class="nf"><h1>404</h1><p>nothing here. <a href="/">back to the writing</a>.</p>{art("beasts")}</main>"""
-    write("/404.html", layout(title="not found", description="page not found.", path="/404.html", body=body, nav=""))
+    write("/404.html", layout(title="not found", description="page not found.", path="/404.html", body=body, nav="", chrome=False))
 
 
 def feed(posts):

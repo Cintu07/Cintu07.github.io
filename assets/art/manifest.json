@@ -1,7 +1,7 @@
 {
   "beasts": {
-    "w": 400,
-    "h": 209,
+    "w": 719,
+    "h": 375,
     "ink": true
   },
   "cherubs": {
@@ -15,8 +15,8 @@
     "ink": true
   },
   "frieze": {
-    "w": 500,
-    "h": 203,
+    "w": 609,
+    "h": 247,
     "ink": true
   },
   "oyster": {
