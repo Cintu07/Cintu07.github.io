@@ -309,6 +309,54 @@ def player():
 """
 
 
+# ---------------------------------------------------------------- theme and art
+
+# Runs in the head, before anything is drawn, so a page never flashes the wrong theme. A choice made with the
+# button is remembered; until there is one the page follows the device, even while it is open. The button
+# lives in the header, which a page change replaces, so the click is caught at the document.
+THEME_JS = r"""(function () {
+  var KEY = "pawan-theme", root = document.documentElement, system = matchMedia("(prefers-color-scheme: dark)");
+  function chosen() { try { return localStorage.getItem(KEY); } catch (e) { return null; } }
+  function paint(dark) {
+    root.setAttribute("data-theme", dark ? "dark" : "light");
+    var bar = document.getElementById("theme-color");
+    if (bar) bar.setAttribute("content", dark ? "#141517" : "#ffffff");
+  }
+  var saved = chosen();
+  paint(saved ? saved === "dark" : system.matches);
+  document.addEventListener("click", function (e) {
+    var button = e.target.closest && e.target.closest(".theme");
+    if (!button) return;
+    var dark = root.getAttribute("data-theme") !== "dark";
+    root.classList.add("theme-fade");
+    paint(dark);
+    setTimeout(function () { root.classList.remove("theme-fade"); }, 380);
+    try { localStorage.setItem(KEY, dark ? "dark" : "light"); } catch (err) {}
+  });
+  if (system.addEventListener) system.addEventListener("change", function (e) { if (!chosen()) paint(e.matches); });
+})();"""
+
+THEME_BUTTON = (
+    '<button class="theme" type="button" aria-label="switch between light and dark">'
+    '<svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>'
+    '<svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>'
+    "</button>"
+)
+
+# the cutouts tools/cutout.py made, with their sizes and whether each is black ink on transparency
+# (ink is drawn white on a dark page, a coloured picture is left as it is)
+ART = json.loads((ROOT / "assets" / "art" / "manifest.json").read_text(encoding="utf-8")) if (ROOT / "assets" / "art" / "manifest.json").exists() else {}
+
+
+def art(name, eager=False):
+    a = ART.get(name)
+    if not a:
+        return ""
+    classes = f'art {name}' + (" ink" if a["ink"] else "")
+    loading = ' fetchpriority="high"' if eager else ' loading="lazy"'
+    return f'<img class="{classes}" src="/assets/art/{name}.webp" width="{a["w"]}" height="{a["h"]}" alt=""{loading} decoding="async">'
+
+
 def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=None):
     full_title = NAME if path == "/" else f"{title} · {NAME}"
     canonical = SITE + path
@@ -329,14 +377,16 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
         for href, label in nav_items()
     )
     music = player()
+    ornament = f'<div class="ornament">{art("beasts")}</div>' if art("beasts") else ""
     socials = "".join(f'<a href="{href}"{"" if href.startswith("mailto:") else " rel=\"me noreferrer\""}>{label}</a>' for label, href in SOCIALS)
     return f"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light">
-<meta name="theme-color" content="#ffffff">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" id="theme-color" content="#ffffff">
+<script>{THEME_JS}</script>
 <title>{esc(full_title.lower())}</title>
 <meta name="description" content="{esc(description)}">
 <link rel="canonical" href="{canonical}">
@@ -355,12 +405,12 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
 <script type="application/ld+json">{json.dumps(ld)}</script>
 </head>
 <body{' class="has-music"' if music else ''}>
-<header>
+{art("corner")}<header>
 <a class="title" href="/">{NAME}</a>
-<nav>{links}</nav>
+<nav>{links}{THEME_BUTTON}</nav>
 </header>
 {body}
-<footer><span>pawan kalyan</span><nav>{socials}</nav></footer>
+<footer>{ornament}<span>pawan kalyan</span><nav>{socials}</nav></footer>
 {music}<script>{NAV_JS}</script>
 </body>
 </html>
@@ -427,8 +477,10 @@ def books_page(entries):
     if not entries:
         return
     body = f"""<main>
+<div class="head"><div>
 <h1>books i write</h1>
 <p class="lede-small">free to download, all of them.</p>
+</div>{art("oyster")}</div>
 {"".join(book_card(b, big=True) for b in entries)}
 </main>"""
     write("/books/", layout(title="books", description=entries[0].get("blurb", ""), path="/books/", body=body, nav="/books/",
@@ -558,12 +610,14 @@ def home(posts, entries):
 </section>"""
     body = f"""<main class="home">
 <section class="hello">
+{art("horse", eager=True)}
 <p class="lede">i work on ml infra, databases and inference, and write down what breaks along the way.</p>
 <dl class="facts">
 <div><dt>good at</dt><dd>{GOOD_AT}</dd></div>
 <div><dt>languages</dt><dd>{LANGUAGES}</dd></div>
 </dl>
 </section>
+<div class="divider">{art("wings")}</div>
 <section>
 <h2 class="label">writing <span>{len(posts)}</span></h2>
 <ul class="rows">
@@ -595,6 +649,7 @@ def article(post, posts):
 <article class="prose">
 {post.html}
 </article>
+<div class="end">{art("frieze")}</div>
 {tags}
 {more}
 </main>"""
@@ -628,6 +683,7 @@ def papers_page():
     body = f"""<main>
 <h1>papers i implement</h1>
 <p class="lede-small">the ones i read with an editor open. each links to the code.</p>
+{art("supper")}
 {"".join(items)}
 {fav_html}
 </main>"""
@@ -635,7 +691,7 @@ def papers_page():
 
 
 def not_found():
-    body = """<main class="nf"><h1>404</h1><p>nothing here. <a href="/">back to the writing</a>.</p></main>"""
+    body = f"""<main class="nf"><h1>404</h1><p>nothing here. <a href="/">back to the writing</a>.</p>{art("falling")}</main>"""
     write("/404.html", layout(title="not found", description="page not found.", path="/404.html", body=body, nav=""))
 
 
