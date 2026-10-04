@@ -10,6 +10,7 @@ import html
 import json
 import re
 import shutil
+import urllib.parse
 from pathlib import Path
 
 import markdown
@@ -47,6 +48,8 @@ class Post:
         self.cover = meta.get("cover", "")
         self.url = f"/posts/{self.slug}/"
         self.og = f"/assets/og/{self.slug}.png"
+        # the picture a link to this post unfurls into: its own cover, unless og_cards makes a card for it
+        self.share = self.cover or self.og
         self.minutes = max(1, round(len(body.split()) / WORDS_PER_MINUTE))
         self.standfirst, self.html = render(body)
 
@@ -135,6 +138,72 @@ def favourites():
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
 
 
+# ---------------------------------------------------------------- music
+
+MUSIC_DIR = ROOT / "assets" / "music"
+AUDIO_TYPES = (".mp3", ".m4a", ".ogg", ".opus", ".wav")
+
+# like the main site: the track starts by itself on the first touch, until someone pauses it, and the
+# choice and the place in the song follow you from page to page. nothing here runs without a track.
+MUSIC_JS = """(function () {
+  var audio = document.getElementById("music-audio"), btn = document.getElementById("music");
+  if (!audio || !btn) return;
+  var KEY = "pawan-music", st = { on: true, t: 0 };
+  try { st = Object.assign(st, JSON.parse(localStorage.getItem(KEY)) || {}); } catch (e) {}
+  function persist() { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {} }
+  function paint(playing) {
+    btn.classList.toggle("playing", playing);
+    btn.setAttribute("aria-pressed", playing ? "true" : "false");
+    btn.setAttribute("aria-label", playing ? "pause music" : "play music");
+  }
+  var triggers = ["pointerdown", "keydown", "touchend"];
+  function arm() { triggers.forEach(function (n) { document.addEventListener(n, onTouch, { passive: true }); }); }
+  function disarm() { triggers.forEach(function (n) { document.removeEventListener(n, onTouch); }); }
+  function onTouch(e) { if (!btn.contains(e.target) && st.on) start(); }
+  function start() {
+    var p = audio.play();
+    if (p && p.then) p.then(function () { paint(true); disarm(); }, function () { paint(false); });
+  }
+  audio.volume = 0.35;
+  audio.addEventListener("loadedmetadata", function () {
+    if (st.t > 0 && st.t < audio.duration - 1) audio.currentTime = st.t;
+  }, { once: true });
+  audio.addEventListener("error", function () { btn.hidden = true; });
+  var last = 0;
+  audio.addEventListener("timeupdate", function () {
+    var now = Date.now();
+    if (now - last > 1000) { last = now; st.t = audio.currentTime; persist(); }
+  });
+  window.addEventListener("pagehide", function () { st.t = audio.currentTime; persist(); });
+  btn.addEventListener("click", function () {
+    if (audio.paused) { st.on = true; persist(); start(); }
+    else { audio.pause(); st.on = false; persist(); paint(false); }
+  });
+  btn.hidden = false;
+  paint(false);
+  if (st.on) { start(); arm(); }
+})();"""
+
+
+def music_track():
+    """a track in assets/music turns the player on. without one a page has no player at all."""
+    tracks = sorted(p for p in MUSIC_DIR.glob("*") if p.suffix.lower() in AUDIO_TYPES) if MUSIC_DIR.is_dir() else []
+    return "/assets/music/" + urllib.parse.quote(tracks[0].name) if tracks else ""
+
+
+def player():
+    src = music_track()
+    if not src:
+        return ""
+    return f"""<button id="music" class="music" type="button" aria-pressed="false" aria-label="play music" hidden>
+<svg class="play" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" fill="currentColor"/></svg>
+<span class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+</button>
+<audio id="music-audio" src="{src}" preload="auto" loop></audio>
+<script>{MUSIC_JS}</script>
+"""
+
+
 def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=None):
     full_title = NAME if path == "/" else f"{title} · {NAME}"
     canonical = SITE + path
@@ -154,6 +223,7 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
         '<a href="{}"{}>{}</a>'.format(href, ' aria-current="page"' if href == nav else "", label)
         for href, label in nav_items()
     )
+    music = player()
     socials = "".join(f'<a href="{href}"{"" if href.startswith("mailto:") else " rel=\"me noreferrer\""}>{label}</a>' for label, href in SOCIALS)
     return f"""<!doctype html>
 <html lang="en">
@@ -179,14 +249,14 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
 <link rel="stylesheet" href="/assets/site.css">
 <script type="application/ld+json">{json.dumps(ld)}</script>
 </head>
-<body>
+<body{' class="has-music"' if music else ''}>
 <header>
 <a class="title" href="/">{NAME}</a>
 <nav>{links}</nav>
 </header>
 {body}
 <footer><span>pawan kalyan</span><nav>{socials}</nav></footer>
-</body>
+{music}</body>
 </html>
 """
 
@@ -306,9 +376,43 @@ def og_card(target, *, title, kicker="", footer="", title_size=(64, 36), max_lin
     page.get_pixmap(dpi=72).save(target)
 
 
+def og_wide_cover(post):
+    """a cover wider than a share card would lose its edges on x and linkedin, and with them
+    the title. a wide one goes onto a card of its own colour instead, so nothing is cut."""
+    import pymupdf
+
+    src = ROOT / post.cover.lstrip("/")
+    if src.suffix.lower() not in (".jpg", ".jpeg", ".png") or not src.is_file():
+        return False
+    pix = pymupdf.Pixmap(src)
+    if pix.width / pix.height < 2.0:
+        return False
+
+    def edge(y):
+        """the colour along one edge of the cover, as 0-1 floats"""
+        px = [pix.pixel(x, y) for x in range(0, pix.width, max(1, pix.width // 40))]
+        return tuple(sum(c[i] for c in px) / len(px) / 255 for i in range(3))
+
+    doc = pymupdf.open()
+    page = doc.new_page(width=1200, height=630)
+    height = 1200 * pix.height / pix.width
+    top = (630 - height) / 2
+    page.draw_rect(pymupdf.Rect(0, 0, 1200, 315), color=None, fill=edge(2))
+    page.draw_rect(pymupdf.Rect(0, 315, 1200, 630), color=None, fill=edge(pix.height - 3))
+    page.insert_image(pymupdf.Rect(0, top, 1200, top + height), filename=str(src))
+
+    target = DIST / post.og.lstrip("/")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    page.get_pixmap(dpi=72).save(target)
+    return True
+
+
 def og_cards(posts):
     og_card(SITE_OG, title=NAME, footer=f"{GOOD_AT}  ·  {LANGUAGES}", title_size=(150, 150), max_lines=1)
     for p in posts:
+        if p.cover and og_wide_cover(p):
+            p.share = p.og
+            continue
         og_card(p.og, title=p.title.lower(), kicker=f"{NAME}  ·  writing",
                 footer=f"{SITE.removeprefix('https://')}  ·  {p.minutes} min read  ·  {p.pretty_date}")
 
@@ -385,7 +489,7 @@ def article(post, posts):
 </main>"""
     write(post.url, layout(
         title=post.title, description=post.description, path=post.url, body=body, nav="/",
-        og_image=post.cover or post.og, article=post,
+        og_image=post.share, article=post,
     ))
 
 
@@ -461,7 +565,7 @@ def posts_json(posts):
             "description": p.description,
             "tags": p.tags,
             "cover": absolute(p.cover) if p.cover else "",
-            "og": absolute(p.cover or p.og),
+            "og": absolute(p.share),
             "minutes": p.minutes,
             "url": SITE + p.url,
             "markdown": body,

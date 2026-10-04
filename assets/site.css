@@ -258,6 +258,31 @@ h1.second { margin-top: 4rem; padding-top: 2.2rem; border-top: 1px solid var(--r
 
 .nf h1 { font-size: clamp(3.4rem, 18vw, 5.4rem); color: var(--accent); }
 
+/* ------------------------------------------------------------- music */
+
+.music {
+  position: fixed; z-index: 60; right: max(1rem, env(safe-area-inset-right)); bottom: max(1rem, env(safe-area-inset-bottom));
+  display: grid; place-items: center; width: 2.6rem; height: 2.6rem; padding: 0; border-radius: 50%;
+  border: 1px solid var(--rule-strong); background: rgba(255, 255, 255, 0.82); color: var(--ink-faint); cursor: pointer;
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); box-shadow: 0 6px 20px -8px rgba(30, 30, 30, 0.35);
+  transition: color 220ms var(--ease), border-color 220ms var(--ease), transform 220ms var(--ease);
+}
+.music[hidden] { display: none; }
+.music:hover { color: var(--accent); border-color: var(--accent); transform: translateY(-2px); }
+.music:active { transform: scale(0.94); }
+.music .play { margin-left: 2px; }
+.music .bars { display: none; align-items: flex-end; gap: 3px; height: 0.8rem; }
+.music .bars i { display: block; width: 2px; height: 100%; border-radius: 2px; background: currentColor; transform-origin: bottom; animation: bar 0.6s ease-in-out infinite alternate; }
+.music .bars i:nth-child(1) { animation-duration: 0.45s; animation-delay: 0.1s; }
+.music .bars i:nth-child(2) { animation-duration: 0.75s; animation-delay: 0.3s; }
+.music .bars i:nth-child(3) { animation-duration: 0.55s; }
+.music .bars i:nth-child(4) { animation-duration: 0.65s; animation-delay: 0.2s; }
+.music.playing .play { display: none; }
+.music.playing .bars { display: flex; }
+@keyframes bar { from { transform: scaleY(0.3); } to { transform: scaleY(1); } }
+/* the button sits over the bottom corner, so the footer links stay clear of it */
+.has-music footer { margin-bottom: 3.4rem; }
+
 /* ------------------------------------------------------------- small screens */
 
 @media (max-width: 760px) {
