@@ -243,8 +243,10 @@ def favourites():
 MUSIC_DIR = ROOT / "assets" / "music"
 AUDIO_TYPES = (".mp3", ".m4a", ".ogg", ".opus", ".wav")
 
-# like the main site: the track starts by itself on the first touch, until someone pauses it, and the
-# choice and the place in the song follow you from page to page. nothing here runs without a track.
+# The song starts by itself when a page opens. A browser will not play sound before the visitor has touched
+# the page, so when it refuses the song is started muted, which is always allowed, and the first tap, click or
+# key press anywhere turns the sound on. It plays until someone pauses it, and a pause stays a pause. The
+# choice and the place in the song survive a reload. Nothing here runs without a track.
 MUSIC_JS = """(function () {
 function boot() {
   var audio = document.getElementById("music-audio"), btn = document.getElementById("music");
@@ -252,24 +254,45 @@ function boot() {
   var KEY = "pawan-music", st = { on: true, t: 0 };
   try { st = Object.assign(st, JSON.parse(localStorage.getItem(KEY)) || {}); } catch (e) {}
   function persist() { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {} }
+  var silent = false; // running, but muted, because the browser has not allowed sound yet
   function paint(playing) {
     btn.classList.toggle("playing", playing);
+    btn.classList.toggle("silent", playing && silent);
     btn.setAttribute("aria-pressed", playing ? "true" : "false");
-    btn.setAttribute("aria-label", playing ? "pause music" : "play music");
+    btn.setAttribute("aria-label", silent ? "turn the sound on" : playing ? "pause music" : "play music");
   }
   var triggers = ["pointerdown", "keydown", "touchend"];
   function arm() { triggers.forEach(function (n) { document.addEventListener(n, onTouch, { passive: true }); }); }
   function disarm() { triggers.forEach(function (n) { document.removeEventListener(n, onTouch); }); }
-  function onTouch(e) { if (!btn.contains(e.target) && st.on) start(); }
+  function sound() { // the song is already going, so a tap only has to give it its sound
+    silent = false;
+    audio.muted = false;
+    if (audio.paused) { paint(false); return; } // the browser stopped it as it was unmuted: leave it for the next tap
+    disarm();
+    paint(true);
+  }
+  function onTouch(e) {
+    if (btn.contains(e.target) || !st.on) return;
+    if (silent) sound(); else start();
+  }
   function start() {
+    silent = false;
+    audio.muted = false;
     var p = audio.play();
-    if (p && p.then) p.then(function () { paint(true); disarm(); }, function () { paint(false); });
+    if (p && p.then) p.then(function () { paint(true); disarm(); }, function () {
+      // no sound until the page has been touched. a muted song is allowed, so run it that way and wait for the touch
+      audio.muted = true;
+      var q = audio.play();
+      if (q && q.then) q.then(function () { silent = true; paint(true); }, function () { silent = false; paint(false); });
+    });
   }
   audio.volume = 0.35;
   audio.addEventListener("loadedmetadata", function () {
     if (st.t > 0 && st.t < audio.duration - 1) audio.currentTime = st.t;
   }, { once: true });
   audio.addEventListener("error", function () { btn.hidden = true; });
+  // if the browser pauses it anyway, say so, and try again at the next touch
+  audio.addEventListener("pause", function () { silent = false; paint(false); if (st.on) arm(); });
   var last = 0;
   audio.addEventListener("timeupdate", function () {
     var now = Date.now();
@@ -277,8 +300,9 @@ function boot() {
   });
   window.addEventListener("pagehide", function () { st.t = audio.currentTime; persist(); });
   btn.addEventListener("click", function () {
-    if (audio.paused) { st.on = true; persist(); start(); }
-    else { audio.pause(); st.on = false; persist(); paint(false); }
+    if (silent) { st.on = true; persist(); sound(); }
+    else if (audio.paused) { st.on = true; persist(); start(); }
+    else { st.on = false; persist(); audio.pause(); paint(false); }
   });
   btn.hidden = false;
   paint(false);

@@ -354,6 +354,10 @@ main:focus { outline: none; }
 .music .bars i:nth-child(4) { animation-duration: 0.65s; animation-delay: 0.2s; }
 .music.playing .play { display: none; }
 .music.playing .bars { display: flex; }
+/* running without sound yet: the bars move, and a ring beats until the first tap gives it sound */
+.music.silent { color: var(--accent); border-color: var(--accent); }
+.music.silent::after { content: ""; position: absolute; inset: -5px; border-radius: 50%; border: 1px solid var(--accent); opacity: 0; animation: ring 1.9s var(--ease) infinite; }
+@keyframes ring { from { transform: scale(0.82); opacity: 0.55; } to { transform: scale(1.25); opacity: 0; } }
 @keyframes bar { from { transform: scaleY(0.3); } to { transform: scaleY(1); } }
 
 /* ------------------------------------------------------------- theme button */
