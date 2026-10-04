@@ -320,7 +320,7 @@ THEME_JS = r"""(function () {
   function paint(dark) {
     root.setAttribute("data-theme", dark ? "dark" : "light");
     var bar = document.getElementById("theme-color");
-    if (bar) bar.setAttribute("content", dark ? "#141517" : "#ffffff");
+    if (bar) bar.setAttribute("content", dark ? "#101212" : "#ffffff");
   }
   var saved = chosen();
   paint(saved ? saved === "dark" : system.matches);
@@ -377,7 +377,7 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
         for href, label in nav_items()
     )
     music = player()
-    ornament = f'<div class="ornament">{art("beasts")}</div>' if art("beasts") else ""
+    plinth = f'<div class="plinth">{art("frieze")}</div>' if art("frieze") else ""
     socials = "".join(f'<a href="{href}"{"" if href.startswith("mailto:") else " rel=\"me noreferrer\""}>{label}</a>' for label, href in SOCIALS)
     return f"""<!doctype html>
 <html lang="en">
@@ -385,6 +385,7 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
+<meta name="darkreader-lock">
 <meta name="theme-color" id="theme-color" content="#ffffff">
 <script>{THEME_JS}</script>
 <title>{esc(full_title.lower())}</title>
@@ -405,12 +406,15 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
 <script type="application/ld+json">{json.dumps(ld)}</script>
 </head>
 <body{' class="has-music"' if music else ''}>
-{art("corner")}<header>
+<header>
 <a class="title" href="/">{NAME}</a>
 <nav>{links}{THEME_BUTTON}</nav>
 </header>
 {body}
-<footer>{ornament}<span>pawan kalyan</span><nav>{socials}</nav></footer>
+<footer>
+<div class="foot"><span>pawan kalyan</span><nav>{socials}</nav></div>
+{plinth}
+</footer>
 {music}<script>{NAV_JS}</script>
 </body>
 </html>
@@ -480,7 +484,7 @@ def books_page(entries):
 <div class="head"><div>
 <h1>books i write</h1>
 <p class="lede-small">free to download, all of them.</p>
-</div>{art("oyster")}</div>
+</div>{art("cherubs")}</div>
 {"".join(book_card(b, big=True) for b in entries)}
 </main>"""
     write("/books/", layout(title="books", description=entries[0].get("blurb", ""), path="/books/", body=body, nav="/books/",
@@ -610,7 +614,7 @@ def home(posts, entries):
 </section>"""
     body = f"""<main class="home">
 <section class="hello">
-{art("horse", eager=True)}
+{art("falling", eager=True)}
 <p class="lede">i work on ml infra, databases and inference, and write down what breaks along the way.</p>
 <dl class="facts">
 <div><dt>good at</dt><dd>{GOOD_AT}</dd></div>
@@ -649,7 +653,7 @@ def article(post, posts):
 <article class="prose">
 {post.html}
 </article>
-<div class="end">{art("frieze")}</div>
+<div class="end">{art("oyster")}</div>
 {tags}
 {more}
 </main>"""
@@ -691,7 +695,7 @@ def papers_page():
 
 
 def not_found():
-    body = f"""<main class="nf"><h1>404</h1><p>nothing here. <a href="/">back to the writing</a>.</p>{art("falling")}</main>"""
+    body = f"""<main class="nf"><h1>404</h1><p>nothing here. <a href="/">back to the writing</a>.</p>{art("beasts")}</main>"""
     write("/404.html", layout(title="not found", description="page not found.", path="/404.html", body=body, nav=""))
 
 

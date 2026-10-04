@@ -130,7 +130,7 @@ def rembg_cut(rgb):
 
 def drop_specks(rgba, smallest):
     """bits of dust and compression noise that float away from the subject"""
-    labels, count = ndi.label(rgba[..., 3] > 25, GRID8)
+    labels, count = ndi.label(rgba[..., 3] > 6, GRID8)  # as faint as the crop looks, so a faint speck cannot widen it
     if not count:
         return rgba
     sizes = ndi.sum(np.ones_like(labels), labels, range(1, count + 1))
