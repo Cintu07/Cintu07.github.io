@@ -357,6 +357,14 @@ main:focus { outline: none; }
 .music.silent { color: var(--accent); border-color: var(--accent); }
 .music.silent::after { content: ""; position: absolute; inset: -5px; border-radius: 50%; border: 1px solid var(--accent); opacity: 0; animation: ring 1.9s var(--ease) infinite; }
 @keyframes ring { from { transform: scale(0.82); opacity: 0.55; } to { transform: scale(1.25); opacity: 0; } }
+/* and a note beside it, so nobody wonders why a song that is running cannot be heard */
+.music.silent::before {
+  content: "tap for sound"; position: absolute; right: calc(100% + 0.7rem); top: 50%; transform: translateY(-50%); white-space: nowrap;
+  padding: 0.3rem 0.85rem 0.35rem; border-radius: 999px; border: 1px solid var(--rule-strong); background: var(--glass);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); color: var(--ink-soft); font-size: 0.95rem; line-height: 1.2;
+  animation: nudge 2.2s var(--ease) infinite alternate;
+}
+@keyframes nudge { from { transform: translate(0, -50%); } to { transform: translate(-5px, -50%); } }
 @keyframes bar { from { transform: scaleY(0.3); } to { transform: scaleY(1); } }
 
 /* ------------------------------------------------------------- theme button */

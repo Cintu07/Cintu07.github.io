@@ -261,7 +261,8 @@ function boot() {
     btn.setAttribute("aria-pressed", playing ? "true" : "false");
     btn.setAttribute("aria-label", silent ? "turn the sound on" : playing ? "pause music" : "play music");
   }
-  var triggers = ["pointerdown", "keydown", "touchend"];
+  // the inputs a browser counts as a touch. a scroll or a hover is not one, and neither is the start of a touch
+  var triggers = ["pointerdown", "mousedown", "touchend", "keydown", "click"];
   function arm() { triggers.forEach(function (n) { document.addEventListener(n, onTouch, { passive: true }); }); }
   function disarm() { triggers.forEach(function (n) { document.removeEventListener(n, onTouch); }); }
   function sound() { // the song is already going, so a tap only has to give it its sound
