@@ -23,6 +23,19 @@ NAME = "pawan"
 TAGLINE = "long posts on ml infra, databases and inference, and the bugs in between."
 GOOD_AT = "ml infra, databases, inference"
 LANGUAGES = "rust, go, typescript"
+# chrome prerenders a page the moment you hover its link, so the click opens it already built.
+# downloads are left out: a book or a source bundle should not be fetched by a hover.
+SPECULATION = json.dumps({
+    "prerender": [{
+        "where": {"and": [
+            {"href_matches": "/*"},
+            {"not": {"href_matches": "/assets/*"}},
+            {"not": {"selector_matches": "[download]"}},
+        ]},
+        "eagerness": "moderate",
+    }],
+}, separators=(",", ":"))
+
 SITE_OG = "/assets/og/site.png"
 DEFAULT_OG = SITE_OG
 WORDS_PER_MINUTE = 225
@@ -80,7 +93,7 @@ def svg_size(src):
 def figure(m):
     alt, src = m.group(1), m.group(2)
     caption = f"<figcaption>{alt}</figcaption>" if alt.strip() else ""
-    return f'<figure><img src="{src}" alt="{alt}"{svg_size(src)} loading="lazy">{caption}</figure>'
+    return f'<figure><img src="{src}" alt="{alt}"{svg_size(src)} loading="lazy" decoding="async">{caption}</figure>'
 
 
 def render(body):
@@ -146,6 +159,7 @@ AUDIO_TYPES = (".mp3", ".m4a", ".ogg", ".opus", ".wav")
 # like the main site: the track starts by itself on the first touch, until someone pauses it, and the
 # choice and the place in the song follow you from page to page. nothing here runs without a track.
 MUSIC_JS = """(function () {
+function boot() {
   var audio = document.getElementById("music-audio"), btn = document.getElementById("music");
   if (!audio || !btn) return;
   var KEY = "pawan-music", st = { on: true, t: 0 };
@@ -182,6 +196,10 @@ MUSIC_JS = """(function () {
   btn.hidden = false;
   paint(false);
   if (st.on) { start(); arm(); }
+}
+// a page the browser prerendered on hover has not been opened yet: wait, so the song is not
+// restarted from a stale position the moment it is opened
+if (document.prerendering) document.addEventListener("prerenderingchange", boot, { once: true }); else boot();
 })();"""
 
 
@@ -199,7 +217,7 @@ def player():
 <svg class="play" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" fill="currentColor"/></svg>
 <span class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
 </button>
-<audio id="music-audio" src="{src}" preload="auto" loop></audio>
+<audio id="music-audio" src="{src}" preload="metadata" loop></audio>
 <script>{MUSIC_JS}</script>
 """
 
@@ -247,6 +265,7 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
 <meta property="og:image" content="{og}">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="/assets/site.css">
+<script type="speculationrules">{SPECULATION}</script>
 <script type="application/ld+json">{json.dumps(ld)}</script>
 </head>
 <body{' class="has-music"' if music else ''}>
@@ -290,14 +309,19 @@ def prepare_book(b):
         name = Path(pdf).stem + "-cover.jpg"
         target = DIST / "assets" / "books" / name
         target.parent.mkdir(parents=True, exist_ok=True)
-        doc[0].get_pixmap(dpi=100).save(target, jpg_quality=86)
+        pix = doc[0].get_pixmap(dpi=100)
+        pix.save(target, jpg_quality=86)
         b["cover"] = f"/assets/books/{name}"
+        b["cover_size"] = (pix.width, pix.height)
     return b
 
 
 def book_card(b, big=False):
     meta = " · ".join(x for x in (b.get("year", ""), f'{b["pages"]} pages' if b.get("pages") else "", "free pdf") if x)
-    cover = f'<a href="{b["pdf"]}" download class="cover-link"><img class="cover" src="{b["cover"]}" alt="cover of {esc(b["title"])}" loading="lazy"></a>' if b.get("cover") else ""
+    # the cover's size is known when it is made from the pdf, so the page keeps its room while it loads
+    size = f' width="{b["cover_size"][0]}" height="{b["cover_size"][1]}"' if b.get("cover_size") else ""
+    cover = f'<a href="{b["pdf"]}" download class="cover-link"><img class="cover" src="{b["cover"]}" alt="cover of {esc(b["title"])}"{size} loading="lazy" decoding="async"></a>' if b.get("cover") else ""
+    code = f'<a class="code-link" href="{b["code"]}" download>source code <span>{size_of(b["code"])}</span></a>' if b.get("code") else ""
     blurb = f'<p class="note">{esc(b["blurb"])}</p>' if big and b.get("blurb") else ""
     subtitle = f'<p class="subtitle">{esc(b["subtitle"])}</p>' if b.get("subtitle") else ""
     return f"""<div class="book{" big" if big else ""}">
@@ -307,7 +331,7 @@ def book_card(b, big=False):
 {subtitle}
 {blurb}
 <p class="meta">{esc(meta)}</p>
-<a class="button" href="{b["pdf"]}" download>download the pdf <span>{size_of(b["pdf"])}</span></a>
+<div class="actions"><a class="button" href="{b["pdf"]}" download>download the pdf <span>{size_of(b["pdf"])}</span></a>{code}</div>
 </div>
 </div>"""
 
@@ -573,6 +597,26 @@ def posts_json(posts):
     write("/posts.json", json.dumps(out, ensure_ascii=False))
 
 
+NUMBER = re.compile(r"-?\d+\.\d+")
+
+
+def _short(m):
+    s = f"{round(float(m.group()), 2):.2f}".rstrip("0").rstrip(".")
+    return "0" if s in ("-0", "") else s
+
+
+def shrink_svgs():
+    """an excalidraw export draws its text as glyph outlines with six decimals each. two decimals draw
+    the same picture (checked pixel for pixel at 2x) in about a third less markup. only the copies in
+    dist are touched, the files in assets stay exactly as they were exported."""
+    for path in (DIST / "assets" / "img").rglob("*.svg"):
+        if path.stat().st_size < 20_000:
+            continue
+        svg = path.read_text(encoding="utf-8")
+        svg = re.sub(r'(\sd=")([^"]*)(")', lambda m: m.group(1) + re.sub(r"\s+", " ", NUMBER.sub(_short, m.group(2))).strip() + m.group(3), svg)
+        path.write_text(re.sub(r">\s+<", "><", svg), encoding="utf-8", newline="\n")
+
+
 def sitemap(posts, has_books):
     urls = ["/", "/papers/"] + (["/books/"] if has_books else []) + [p.url for p in posts]
     body = "".join(f"<url><loc>{SITE}{u}</loc></url>\n" for u in urls)
@@ -583,6 +627,7 @@ def sitemap(posts, has_books):
 def main():
     shutil.rmtree(DIST, ignore_errors=True)
     shutil.copytree(ROOT / "assets", DIST / "assets")
+    shrink_svgs()
     posts = sorted((Post(p) for p in (CONTENT / "posts").glob("*.md")), key=lambda p: p.date, reverse=True)
     entries = [prepare_book(b) for b in books()]
     og_cards(posts)

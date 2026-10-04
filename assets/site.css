@@ -198,6 +198,10 @@ h1.second { margin-top: 4rem; padding-top: 2.2rem; border-top: 1px solid var(--r
   transition: background 220ms var(--ease), color 220ms var(--ease), transform 220ms var(--ease);
 }
 .button span { font-size: 0.9rem; opacity: 0.65; }
+.actions { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.6rem 1.3rem; }
+.code-link { font-size: 1.02rem; color: var(--ink-soft); text-decoration: none; background: linear-gradient(currentColor, currentColor) 0 100% / 0 1px no-repeat; transition: background-size 320ms var(--ease), color 180ms var(--ease); }
+.code-link:hover { color: var(--accent); background-size: 100% 1px; }
+.code-link span { font-size: 0.9rem; opacity: 0.65; }
 .button:hover { background: var(--ink); color: var(--bg); transform: translateY(-1px); }
 
 /* ------------------------------------------------------------- prose */
