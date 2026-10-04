@@ -253,6 +253,12 @@ h1.second { margin-top: 2.4rem; padding-top: 1.5rem; border-top: 1px solid var(-
 .book.big { grid-template-columns: 11rem 1fr; gap: 2rem; padding: 0 0 2.4rem; }
 .book.big:last-child { padding-bottom: 0; }
 .book h3 { margin: 0 0 0.3rem; font-size: 1.35rem; }
+.book h1 { margin: 0 0 0.3rem; font-size: clamp(1.9rem, 1.4rem + 2vw, 2.4rem); }
+.book h3 a { color: inherit; text-decoration: none; }
+.book h3 a:hover { color: var(--ink); }
+.back { margin: 0 0 1.6rem; font-size: 1rem; }
+.back a { color: var(--ink-faint); }
+.back a::before { content: "\2190\00a0"; }
 .book.big h3 { font-size: 1.7rem; }
 .book .subtitle { margin: 0 0 0.7rem; color: var(--ink-soft); line-height: 1.4; }
 .book .note { margin: 0 0 0.9rem; }

@@ -382,7 +382,7 @@ def art(name, eager=False):
     return f'<img class="{classes}" src="/assets/art/{name}.webp" width="{a["w"]}" height="{a["h"]}" alt=""{loading} decoding="async">'
 
 
-def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=None, chrome=True):
+def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=None, chrome=True, share_title=None):
     full_title = NAME if path == "/" else f"{title} · {NAME}"
     canonical = SITE + path
     og = og_image if og_image.startswith("http") else SITE + og_image
@@ -432,7 +432,7 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
 <link rel="preload" href="/assets/fonts/virgil.woff2" as="font" type="font/woff2" crossorigin>
 <meta property="og:site_name" content="{NAME}">
 <meta property="og:type" content="{"article" if article else "website"}">
-<meta property="og:title" content="{esc((title if article else NAME).lower())}">
+<meta property="og:title" content="{esc((share_title or (title if article else NAME)).lower())}">
 <meta property="og:description" content="{esc(description)}">
 <meta property="og:url" content="{canonical}">
 <meta property="og:image" content="{og}">
@@ -483,6 +483,57 @@ def wide_cover(page, dest):
     return pix.width, pix.height
 
 
+def book_slug(title):
+    return re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-") or "book"
+
+
+def og_book_card(b, page):
+    """the picture a link to a book's page unfurls into: its title on the left and its cover standing on the right.
+    a pdf has nowhere to put a preview, which is why a link to the file itself shows nothing"""
+    import pymupdf
+
+    virgil = pymupdf.Font(fontfile=str(OG_DIR / "virgil.ttf"))
+    doc = pymupdf.open()
+    card = doc.new_page(width=1200, height=630)
+    card.draw_rect(card.rect, color=None, fill=(1, 1, 1))
+
+    top, bottom = 62, 568
+    scale = (bottom - top) / page.rect.height
+    cover = page.get_pixmap(matrix=pymupdf.Matrix(scale * 2, scale * 2))
+    right = 1200 - 88
+    left = right - page.rect.width * scale
+    for i, opacity in enumerate((0.06, 0.04, 0.025)):  # a soft shadow, as a few faint rectangles
+        card.draw_rect(pymupdf.Rect(left + 3 + i * 3, top + 8 + i * 3, right + 3 + i * 3, bottom + 8 + i * 3), color=None, fill=(0, 0, 0), fill_opacity=opacity)
+    card.insert_image(pymupdf.Rect(left, top, right, bottom), pixmap=cover)
+    card.draw_rect(pymupdf.Rect(left, top, right, bottom), color=(0.82, 0.84, 0.87), width=1)
+
+    room = left - 84 - 56
+    size = 76
+    lines = wrap(virgil, b["title"].lower(), size, room)
+    while (len(lines) > 3 or any(virgil.text_length(line, fontsize=size) > room for line in lines)) and size > 40:
+        size -= 4
+        lines = wrap(virgil, b["title"].lower(), size, room)
+    leading = size * 1.1
+    y = 215
+    title, soft, blue = pymupdf.TextWriter(card.rect), pymupdf.TextWriter(card.rect), pymupdf.TextWriter(card.rect)
+    blue.append((86, 118), f"{NAME}  ·  book", font=virgil, fontsize=28)
+    for line in lines:
+        title.append((84, y), line, font=virgil, fontsize=size)
+        y += leading
+    for line in wrap(virgil, b.get("subtitle", "").lower(), 27, room)[:3]:
+        soft.append((86, y + 18), line, font=virgil, fontsize=27)
+        y += 36
+    meta = " · ".join(x for x in (f'{b["pages"]} pages' if b.get("pages") else "", "free pdf") if x)
+    soft.append((86, 548), meta, font=virgil, fontsize=26)
+    title.write_text(card, color=INK)
+    soft.write_text(card, color=FAINT)
+    blue.write_text(card, color=BLUE)
+
+    target = DIST / "assets" / "og" / f"book-{b['slug']}.png"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    card.get_pixmap(dpi=72).save(target)
+
+
 def prepare_book(b):
     """books uploaded from the sandbox come with only a pdf. the cover is its
     first page and the page count is read off the file."""
@@ -506,10 +557,14 @@ def prepare_book(b):
     (DIST / "assets" / "books").mkdir(parents=True, exist_ok=True)
     w, h = wide_cover(doc[0], DIST / "assets" / "books" / wide)
     b["cover_wide"] = (f"/assets/books/{wide}", w, h)
+    b["slug"] = book_slug(b["title"])
+    b["url"] = f"/books/{b['slug']}/"
+    b["share"] = f"/assets/og/book-{b['slug']}.png"
+    og_book_card(b, doc[0])
     return b
 
 
-def book_card(b, big=False):
+def book_card(b, big=False, heading="h3"):
     meta = " · ".join(x for x in (b.get("year", ""), f'{b["pages"]} pages' if b.get("pages") else "", "free pdf") if x)
     # the cover's size is known when it is made from the pdf, so the page keeps its room while it loads
     size = f' width="{b["cover_size"][0]}" height="{b["cover_size"][1]}"' if b.get("cover_size") else ""
@@ -518,10 +573,11 @@ def book_card(b, big=False):
     code = f'<a class="code-link" href="{b["code"]}" download>source code <span>{size_of(b["code"])}</span></a>' if b.get("code") else ""
     blurb = f'<p class="note">{esc(b["blurb"])}</p>' if big and b.get("blurb") else ""
     subtitle = f'<p class="subtitle">{esc(b["subtitle"])}</p>' if b.get("subtitle") else ""
+    title = f'<a href="{b["url"]}">{esc(b["title"])}</a>' if b.get("url") and heading != "h1" else esc(b["title"])
     return f"""<div class="book{" big" if big else ""}">
 {cover}
 <div>
-<h3>{esc(b["title"])}</h3>
+<{heading}>{title}</{heading}>
 {subtitle}
 {blurb}
 <p class="meta">{esc(meta)}</p>
@@ -541,7 +597,17 @@ def books_page(entries):
 {"".join(book_card(b, big=True) for b in entries)}
 </main>"""
     write("/books/", layout(title="books", description=entries[0].get("blurb", ""), path="/books/", body=body, nav="/books/",
-                            og_image=entries[0].get("cover", DEFAULT_OG)))
+                            og_image=entries[0].get("share", entries[0].get("cover", DEFAULT_OG)), share_title="books"))
+
+
+def book_page(b):
+    """the page to share: a link to the pdf itself has no preview, a link to this one has the card"""
+    body = f"""<main>
+<p class="back"><a href="/books/">all books</a></p>
+{book_card(b, big=True, heading="h1")}
+</main>"""
+    write(b["url"], layout(title=b["title"], description=b.get("subtitle") or b.get("blurb", ""), path=b["url"], body=body, nav="/books/",
+                           og_image=b.get("share", DEFAULT_OG), share_title=b["title"]))
 
 
 # ---------------------------------------------------------------- link previews
@@ -744,7 +810,7 @@ def papers_page():
 {"".join(items)}
 {fav_html}
 </main>"""
-    write("/papers/", layout(title="papers", description="research papers i implement, with the code.", path="/papers/", body=body, nav="/papers/"))
+    write("/papers/", layout(title="papers", description="research papers i implement, with the code.", path="/papers/", body=body, nav="/papers/", share_title="papers"))
 
 
 def not_found():
@@ -817,8 +883,8 @@ def shrink_svgs():
         path.write_text(re.sub(r">\s+<", "><", svg), encoding="utf-8", newline="\n")
 
 
-def sitemap(posts, has_books):
-    urls = ["/", "/papers/"] + (["/books/"] if has_books else []) + [p.url for p in posts]
+def sitemap(posts, entries):
+    urls = ["/", "/papers/"] + (["/books/"] + [b["url"] for b in entries if b.get("url")] if entries else []) + [p.url for p in posts]
     body = "".join(f"<url><loc>{SITE}{u}</loc></url>\n" for u in urls)
     write("/sitemap.xml", f'<?xml version="1.0" encoding="utf-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n{body}</urlset>\n')
     write("/robots.txt", f"User-agent: *\nAllow: /\nSitemap: {SITE}/sitemap.xml\n")
@@ -836,10 +902,13 @@ def main():
         article(post, posts)
     papers_page()
     books_page(entries)
+    for b in entries:
+        if b.get("url"):
+            book_page(b)
     not_found()
     feed(posts)
     posts_json(posts)
-    sitemap(posts, bool(entries))
+    sitemap(posts, entries)
     print(f"built {len(posts)} posts and {len(entries)} books into {DIST.name}/")
 
 
