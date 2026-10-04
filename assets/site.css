@@ -272,6 +272,9 @@ h1.second { margin-top: 4rem; padding-top: 2.2rem; border-top: 1px solid var(--r
   transition: color 220ms var(--ease), border-color 220ms var(--ease), transform 220ms var(--ease);
 }
 .music[hidden] { display: none; }
+/* named, so a page change fades the page under it and leaves the button where it is */
+.music { view-transition-name: music; }
+main:focus { outline: none; }
 .music:hover { color: var(--accent); border-color: var(--accent); transform: translateY(-2px); }
 .music:active { transform: scale(0.94); }
 .music .play { margin-left: 2px; }

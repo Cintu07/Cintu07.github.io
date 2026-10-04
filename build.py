@@ -23,18 +23,105 @@ NAME = "pawan"
 TAGLINE = "long posts on ml infra, databases and inference, and the bugs in between."
 GOOD_AT = "ml infra, databases, inference"
 LANGUAGES = "rust, go, typescript"
-# chrome prerenders a page the moment you hover its link, so the click opens it already built.
-# downloads are left out: a book or a source bundle should not be fetched by a hover.
-SPECULATION = json.dumps({
-    "prerender": [{
-        "where": {"and": [
-            {"href_matches": "/*"},
-            {"not": {"href_matches": "/assets/*"}},
-            {"not": {"selector_matches": "[download]"}},
-        ]},
-        "eagerness": "moderate",
-    }],
-}, separators=(",", ":"))
+# Moving between pages swaps the header, the page and the footer in place instead of loading a new document.
+# That is what lets the song play on through a click: the player sits outside what is swapped, so the browser
+# never tears it down. A link is fetched when it is hovered or touched, so by the click it is usually here.
+# Anything that is not one of these pages (a download, another site, a modified click) is left to the browser,
+# and so is anything that goes wrong, which then loads the page the ordinary way.
+NAV_JS = r"""(function () {
+  if (!window.fetch || !window.DOMParser || !history.pushState) return;
+  var SWAP = ["header", "main", "footer"];
+  var HEAD = 'meta[name="description"], link[rel="canonical"], meta[property^="og:"], meta[name^="twitter:"], script[type="application/ld+json"]';
+  var pages = {}, current = location.pathname + location.search, turn = 0, timer;
+  // a swap is not a page load, so the browser has nothing to restore the scroll from: it is kept here
+  if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+
+  function target(a) {
+    if (!a) return null;
+    var href = a.getAttribute("href"), to = a.getAttribute("target");
+    if (!href || a.hasAttribute("download") || (to && to !== "_self")) return null;
+    var u = new URL(href, location.href);
+    if (u.origin !== location.origin || /\.[a-z0-9]+$/i.test(u.pathname)) return null;
+    return u;
+  }
+  function load(u) {
+    var key = u.pathname + u.search, hit = pages[key];
+    if (hit && Date.now() - hit.at < 300000) return hit.p;
+    var p = fetch(u.href).then(function (r) {
+      if (!r.ok || (r.headers.get("content-type") || "").indexOf("text/html") < 0) throw new Error("not a page");
+      return r.text().then(function (html) { return { html: html, url: r.url || u.href }; });
+    });
+    pages[key] = { p: p, at: Date.now() };
+    p.catch(function () { delete pages[key]; });
+    return p;
+  }
+  function parse(html) {
+    var next = new DOMParser().parseFromString(html, "text/html");
+    return SWAP.every(function (s) { return document.querySelector(s) && next.querySelector(s); }) ? next : null;
+  }
+  function apply(next, u, how) {
+    if (how === "push") {
+      history.replaceState({ y: window.scrollY }, "");
+      history.pushState({ y: 0 }, "", u.href);
+    }
+    current = u.pathname + u.search;
+    document.title = next.title;
+    document.head.querySelectorAll(HEAD).forEach(function (e) { e.remove(); });
+    next.head.querySelectorAll(HEAD).forEach(function (e) { document.head.appendChild(document.importNode(e, true)); });
+    SWAP.forEach(function (s) { document.querySelector(s).replaceWith(document.importNode(next.querySelector(s), true)); });
+    var main = document.querySelector("main");
+    main.setAttribute("tabindex", "-1");
+    main.focus({ preventScroll: true });
+    var anchor = u.hash && document.getElementById(decodeURIComponent(u.hash.slice(1)));
+    if (anchor) anchor.scrollIntoView();
+    else window.scrollTo(0, how === "pop" ? (history.state && history.state.y) || 0 : 0);
+  }
+  function go(u, how) {
+    var mine = ++turn;
+    load(u).then(function (page) {
+      if (mine !== turn) return; // a newer click has taken over
+      var dest = new URL(page.url, location.href), next = parse(page.html);
+      if (!next) { location.assign(dest.href); return; }
+      var run = function () { apply(next, dest, how); };
+      if (document.startViewTransition && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) document.startViewTransition(run);
+      else run();
+    }).catch(function () { if (mine === turn) location.assign(u.href); });
+  }
+
+  document.addEventListener("click", function (e) {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    var u = target(e.target.closest && e.target.closest("a"));
+    if (!u) return;
+    if (u.pathname + u.search === current) {
+      // the page you are on: back to the top without a reload. an anchor on it is left to the browser
+      if (!u.hash) { e.preventDefault(); window.scrollTo(0, 0); }
+      return;
+    }
+    e.preventDefault();
+    go(u, "push");
+  });
+  window.addEventListener("popstate", function () {
+    if (location.pathname + location.search !== current) go(new URL(location.href), "pop");
+  });
+
+  function warm(e) {
+    var u = target(e.target.closest && e.target.closest("a"));
+    if (!u || u.pathname + u.search === current) return;
+    clearTimeout(timer);
+    timer = setTimeout(function () { load(u).catch(function () {}); }, e.type === "mouseover" ? 60 : 0);
+  }
+  ["mouseover", "touchstart", "focusin"].forEach(function (n) { document.addEventListener(n, warm, { passive: true }); });
+
+  var conn = window.navigator && window.navigator.connection;
+  if (!(conn && conn.saveData)) {
+    (window.requestIdleCallback || function (f) { setTimeout(f, 1500); })(function () {
+      document.querySelectorAll("header nav a").forEach(function (a) {
+        var u = target(a);
+        if (u && u.pathname + u.search !== current) load(u).catch(function () {});
+      });
+    });
+  }
+})();"""
 
 SITE_OG = "/assets/og/site.png"
 DEFAULT_OG = SITE_OG
@@ -265,7 +352,6 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
 <meta property="og:image" content="{og}">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="/assets/site.css">
-<script type="speculationrules">{SPECULATION}</script>
 <script type="application/ld+json">{json.dumps(ld)}</script>
 </head>
 <body{' class="has-music"' if music else ''}>
@@ -275,7 +361,8 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
 </header>
 {body}
 <footer><span>pawan kalyan</span><nav>{socials}</nav></footer>
-{music}</body>
+{music}<script>{NAV_JS}</script>
+</body>
 </html>
 """
 
