@@ -1,24 +1,24 @@
 ---
 title: pointers before cuda: what they are, what changes between machines, and where cuda uses them
 date: 2026-10-15
-description: pointers before cuda: what they are, what changes between machines, and where cuda uses them
+description: what an address is, what changes between machines, and where cuda needs both.
 tags: c, cuda
 cover: /assets/img/pointeres-dark-mode.png
 ---
-This post covers all of chapter 5 of Beej's Guide to C (pointers), then the parts of C that change from one machine to another, then the three places CUDA code leans on both. Each idea gets a rule, a short program, and the output that program printed.
+This post covers pointers in C, then the parts of C that change from one machine to another, then the three places CUDA code leans on both. Each idea gets a rule, a short program, and the output that program printed.
 
 Every C program here was compiled with gcc 13.3 (`-std=c17 -Wall -Wextra`) on x86-64 Linux and run. Output blocks are pasted unchanged. The CUDA snippets were not compiled, because the machine used for this post has no `nvcc`. They are marked where they appear.
 
-1. [memory is numbered bytes](#memory)
-2. [a pointer stores an address](#pointer)
-3. [reading the syntax](#syntax)
-4. [the declaration trap](#declare)
-5. [functions get copies](#copies)
+1. [memory is numbered bytes](#memory-is-numbered-bytes)
+2. [a pointer stores an address](#a-pointer-stores-an-address)
+3. [reading the syntax](#reading-the-syntax)
+4. [the declaration trap](#the-declaration-trap)
+5. [functions get copies](#functions-get-copies)
 6. [NULL](#null)
-7. [sizeof, arithmetic, pointer to pointer](#arith)
-8. [what changes between machines](#platform)
-9. [where cuda uses all this](#cuda)
-10. [cheat sheet and exercises](#sheet)
+7. [sizeof, arithmetic, pointer to pointer](#sizeof-arithmetic-pointer-to-pointer)
+8. [what changes between machines](#what-changes-between-machines)
+9. [where cuda uses all this](#where-cuda-uses-all-this)
+10. [cheat sheet and exercises](#cheat-sheet-and-exercises)
 
 ## memory is numbered bytes
 
@@ -27,6 +27,7 @@ Memory is a long row of bytes. Every byte has a number, and that number is its *
 A type decides two things: how many bytes a variable takes, and how those bytes are read. An `int` is usually 4 bytes, so it sits in 4 neighbouring addresses. The address of the variable is the address of its first byte. `sizeof` gives the byte count:
 
 snippet
+{: .code-caption }
 
 ```c
 printf("an int uses %zu bytes\n", sizeof(int));   // %zu is the format for size_t
@@ -41,9 +42,10 @@ A pointer is a variable whose value is an address. That is the whole definition.
 - `&x` gives the address of `x`.
 - `*p` goes to the address stored in `p` and uses the thing there.
 
-Fig 1. `p` is an ordinary variable. Its value happens to be the address of `x`. (Addresses here are made up to keep the picture small.)
+![Fig 1. p is an ordinary variable. Its value happens to be the address of x. (Addresses here are made up to keep the picture small.)](/assets/img/pointers/fig-1.webp)
 
 table 1 · the five expressions you need, for `int x = 10; int *p = &x;`
+{: .code-caption }
 
 | expression | what it is | type | value in fig 1 |
 | --- | --- | --- | --- |
@@ -56,6 +58,7 @@ table 1 · the five expressions you need, for `int x = 10; int *p = &x;`
 `*p` is not a copy of `x`. It *is* `x`, reached by a different route. Reading `*p` reads `x`, and writing `*p` writes `x`.
 
 basics.c, first part
+{: .code-caption }
 
 ```c
 int i = 10;
@@ -68,7 +71,8 @@ i = 30;
 printf("after i = 30:  *p = %d\n", *p);
 ```
 
-output of basics.c, **pasted unchanged**
+output of basics.c, pasted unchanged
+{: .code-caption }
 
 ```text
 i = 10, *p = 10, p == &i: 1
@@ -88,6 +92,7 @@ Most pointer confusion is grammar, so here is the grammar. A declaration is writ
 The same symbol does different jobs depending on where it sits:
 
 table 2 · one symbol, different jobs
+{: .code-caption }
 
 | symbol | where | meaning |
 | --- | --- | --- |
@@ -106,14 +111,16 @@ Also note what each form changes. `p = &y;` changes where `p` points. `*p = 5;` 
 The `*` belongs to the variable name, not to the type. So this line declares one pointer and one plain int:
 
 snippet
+{: .code-caption }
 
-```text
+```c
 int *a, b;     // a is int *, b is int
 ```
 
-Writing `int* a, b;` means exactly the same thing, which is why that spelling misleads people. Beej's quiz: in `int *a, b, c, *d, e, *f, g, h, *i;` the pointers are `a`, `d`, `f` and `i`. The rest are ints. The program confirms the first case:
+Writing `int* a, b;` means exactly the same thing, which is why that spelling misleads people. Here is a quiz: in `int *a, b, c, *d, e, *f, g, h, *i;` the pointers are `a`, `d`, `f` and `i`. The rest are ints. The program confirms the first case:
 
-output of basics.c, **pasted unchanged**
+output of basics.c, pasted unchanged
+{: .code-caption }
 
 ```text
 int *a, b;  sizeof a = 8, sizeof b = 4
@@ -125,9 +132,10 @@ When you declare pointers, one declaration per line avoids the mistake entirely.
 
 C copies every argument into the function's parameter. A function that receives an `int` changes only its own copy. To let a function change the caller's variable, pass the variable's address. The function gets a copy of the address, and both copies lead to the same variable.
 
-Fig 2. Left: `inc` gets a copy of the value. Right: `inc` gets a copy of the address. Dereferencing that copy reaches the caller's `x`.
+![Fig 2. Left: inc gets a copy of the value. Right: inc gets a copy of the address. Dereferencing that copy reaches the caller's x.](/assets/img/pointers/fig-2.webp)
 
 basics.c, functions
+{: .code-caption }
 
 ```c
 static void inc(int *p) { *p += 1; }
@@ -139,7 +147,8 @@ static void swap_ok(int *a, int *b)    { int t = *a; *a = *b; *b = t; }
 static void reassign(int *p, int *other) { p = other; }
 ```
 
-output of basics.c, **pasted unchanged**
+output of basics.c, pasted unchanged
+{: .code-caption }
 
 ```text
 after inc(&i): i = 31
@@ -152,9 +161,10 @@ after reassign: *r = 1 (r still points at m)
 
 `reassign` shows the second rule. The pointer itself is also a copy, so assigning to `p` inside the function does not move the caller's pointer. gcc even warns about it:
 
-compiler warning for reassign, **pasted unchanged**
+compiler warning for reassign, pasted unchanged
+{: .code-caption }
 
-```cpp
+```text
 basics.c:10:27: warning: parameter 'p' set but not used [-Wunused-but-set-parameter]
    10 | static void reassign(int *p, int *other) { p = other; }
 ```
@@ -175,13 +185,15 @@ Any pointer can be set to `NULL`, which means "points to nothing". Three rules c
 - Check before you use a pointer that might be `NULL`, and set a pointer to `NULL` after you free what it pointed at.
 
 basics.c
+{: .code-caption }
 
 ```c
 int *np = NULL;
 if (np == NULL) printf("np is NULL, so we do not dereference it\n");
 ```
 
-output of basics.c, **pasted unchanged**
+output of basics.c, pasted unchanged
+{: .code-caption }
 
 ```text
 np is NULL, so we do not dereference it
@@ -191,7 +203,8 @@ np is NULL, so we do not dereference it
 
 **sizeof** works on the type of an expression. For `int *p`, `sizeof p` is the size of a pointer and `sizeof *p` is the size of an int. The second form never actually dereferences `p`. It only asks for the type. Allocation code uses it so the size follows the pointer's type automatically: `malloc(n * sizeof *p)`.
 
-output of basics.c, **pasted unchanged**
+output of basics.c, pasted unchanged
+{: .code-caption }
 
 ```text
 sizeof p = 8, sizeof *p = 4
@@ -200,6 +213,7 @@ sizeof p = 8, sizeof *p = 4
 **Pointer arithmetic** moves in units of the pointed-to type. `q + 1` is the address of the next `int`, which is 4 bytes later, not 1. This is how arrays work: `arr[2]` is defined as `*(arr + 2)`.
 
 basics.c
+{: .code-caption }
 
 ```c
 int arr[4] = {10, 20, 30, 40};
@@ -208,7 +222,8 @@ printf("arr[2] = %d, *(arr + 2) = %d, *(q + 2) = %d\n", arr[2], *(arr + 2), *(q 
 printf("q + 1 is %td bytes after q\n", (char *)(q + 1) - (char *)q);
 ```
 
-output of basics.c, **pasted unchanged**
+output of basics.c, pasted unchanged
+{: .code-caption }
 
 ```text
 arr[2] = 30, *(arr + 2) = 30, *(q + 2) = 30
@@ -218,6 +233,7 @@ q + 1 is 4 bytes after q
 **Pointer to pointer** follows from rule 2. `&p` has type `int **`, and each `*` follows one level:
 
 basics.c
+{: .code-caption }
 
 ```c
 int **pp = &p;
@@ -225,7 +241,8 @@ int **pp = &p;
 printf("after **pp = 99: i = %d\n", i);
 ```
 
-output of basics.c, **pasted unchanged**
+output of basics.c, pasted unchanged
+{: .code-caption }
 
 ```text
 after **pp = 99: i = 99
@@ -238,6 +255,7 @@ The C standard does not fix most sizes and layouts. It sets minimums and lets th
 This program prints what *this* machine chose:
 
 platform.c
+{: .code-caption }
 
 ```c
 #include <stdio.h>
@@ -271,9 +289,10 @@ int main(void) {
 }
 ```
 
-output of platform.c, **pasted unchanged**
+output of platform.c, pasted unchanged
+{: .code-caption }
 
-```java
+```text
 char 1  short 2  int 4  long 8  long long 8
 float 4  double 8  void* 8  size_t 8
 0x01020304 in memory: 04 03 02 01
@@ -286,6 +305,7 @@ struct good: size 8, offsets b=0 a=4 c=5
 ### sizes
 
 table 3 · type sizes: measured here vs what C promises
+{: .code-caption }
 
 | type | bytes here | what C guarantees | seen elsewhere (not measured here) |
 | --- | --- | --- | --- |
@@ -302,7 +322,7 @@ table 3 · type sizes: measured here vs what C promises
 
 A multi-byte value occupies consecutive addresses, but C does not say which end goes first. **Little-endian** machines store the least significant byte at the lowest address. **Big-endian** machines do the opposite. Network protocols use big-endian, and x86-64 CPUs are little-endian, as the output above shows.
 
-Fig 3. The same number, stored two ways. Code that reads a file or network packet byte by byte must know which one it is dealing with.
+![Fig 3. The same number, stored two ways. Code that reads a file or network packet byte by byte must know which one it is dealing with.](/assets/img/pointers/fig-3.webp)
 
 ### signed or unsigned char
 
@@ -312,11 +332,12 @@ Plain `char` may be signed or unsigned, depending on the platform. Here it is si
 
 CPUs prefer values at addresses that are multiples of their size, so the compiler inserts unused **padding** bytes between struct fields. The same three fields take 12 bytes or 8 bytes depending only on their order:
 
-Fig 4. Offsets are the ones `offsetof` printed above. Putting the largest field first removes the gaps.
+![Fig 4. Offsets are the ones offsetof printed above. Putting the largest field first removes the gaps.](/assets/img/pointers/fig-4.webp)
 
 ### three kinds of "the standard does not say"
 
 table 4 · how much freedom the compiler has
+{: .code-caption }
 
 | kind | meaning | example | can you rely on it? |
 | --- | --- | --- | --- |
@@ -338,7 +359,7 @@ table 4 · how much freedom the compiler has
 
 A CUDA program has two processors with two separate memories: the CPU with system RAM (the *host*), and the GPU with its own memory (the *device*). Pointers are how your code names locations in each.
 
-Fig 5. Each pointer holds an address in *its own* memory. Data crosses between the two only through an explicit copy.
+![Fig 5. Each pointer holds an address in its own memory. Data crosses between the two only through an explicit copy.](/assets/img/pointers/fig-5.webp)
 
 ### 1. a device pointer is only valid on the device
 
@@ -349,6 +370,7 @@ Fig 5. Each pointer holds an address in *its own* memory. Data crosses between t
 The signature is `cudaMalloc(void **devPtr, size_t size)`. The function must write a new address *into your pointer variable*, so by rule 2 from the functions section, it needs that variable's address. This plain-C program has the same shape, using `malloc` so it can run anywhere:
 
 fakealloc.c
+{: .code-caption }
 
 ```c
 #include <stdio.h>
@@ -380,9 +402,10 @@ int main(void) {
 }
 ```
 
-output of fakealloc.c, **pasted unchanged**
+output of fakealloc.c, pasted unchanged
+{: .code-caption }
 
-```sql
+```text
 buf is not NULL after my_alloc
 buf[0] = 0.0
 buf[1] = 1.5
@@ -401,6 +424,7 @@ The order is destination, source, byte count, direction. The count is the number
 This adds two arrays on the GPU. It was **not compiled** for this post (no `nvcc` available), but it uses only the calls described above. Read it and match each pointer to Fig 5.
 
 vecadd.cu · not compiled here
+{: .code-caption }
 
 ```c
 #include <stdio.h>
@@ -456,6 +480,7 @@ CUDA calls return an error code, and failures often show up later as wrong resul
 ## cheat sheet and exercises
 
 table 5 · the whole post in one table
+{: .code-caption }
 
 | you write | it means |
 | --- | --- |
@@ -471,11 +496,12 @@ table 5 · the whole post in one table
 
 Predict the output on paper first, then run it.
 
-Exercise 1: two pointers, one variable
+### Exercise 1: two pointers, one variable
 
 ex.c
+{: .code-caption }
 
-```text
+```c
 int a = 1, b = 2;
 int *p = &a;
 int *q = p;
@@ -487,23 +513,22 @@ printf("a = %d, b = %d\n", a, b);
 
 Answer: `a = 5, b = 7`. `q` got a copy of `p`'s address, so `*q = 5` wrote into `a`. Then `p` moved to `b`, and `*p = 7` wrote into `b`. (Verified by running it.)
 
-Exercise 2: reassigning a parameter
+### Exercise 2: reassigning a parameter
 
 snippet
+{: .code-caption }
 
-```text
+```c
 void f(int *p) { p = NULL; }
 /* after f(ptr), is ptr NULL? */
 ```
 
 Answer: no. `p` is a copy of `ptr`. To change `ptr` you would pass `&ptr` and take an `int **`.
 
-Exercise 3: sizes on your machine
+### Exercise 3: sizes on your machine
 
 Print `sizeof(int *)` and `sizeof(int)`. This machine gave 8 and 4 (verified by running it). If your numbers differ, you have just seen platform dependence.
 
 ---
 
 **How this was checked.** Compiled with gcc 13.3.0 on Ubuntu 24.04, x86-64, using `-std=c17 -Wall -Wextra`, at both `-O0` and `-O2`; all three programs printed identical output at both levels. The only compiler message was the `reassign` warning shown above, which is intended. The CUDA example is not compiled. Platform notes in the "seen elsewhere" column of table 3 come from general knowledge of other platforms and were not measured here.
-
-![](/assets/img/pointeres-dark-mode.png)

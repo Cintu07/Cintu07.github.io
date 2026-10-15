@@ -167,13 +167,47 @@ def inline(text):
 LEADING_QUOTE = re.compile(r"\A((?:>.*\n?)+)\n*")
 
 
+def raster_size(path):
+    """(width, height) from the header of a png, jpeg or webp, with no image library"""
+    with open(path, "rb") as fh:
+        head = fh.read(65536)
+    if head[:8] == b"\x89PNG\r\n\x1a\n":
+        return int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big")
+    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        kind = head[12:16]
+        if kind == b"VP8X":
+            return 1 + int.from_bytes(head[24:27], "little"), 1 + int.from_bytes(head[27:30], "little")
+        if kind == b"VP8L":
+            b = head[21:25]
+            return 1 + (((b[1] & 0x3F) << 8) | b[0]), 1 + (((b[3] & 0x0F) << 10) | (b[2] << 2) | ((b[1] & 0xC0) >> 6))
+        if kind == b"VP8 ":
+            return int.from_bytes(head[26:28], "little") & 0x3FFF, int.from_bytes(head[28:30], "little") & 0x3FFF
+    if head[:2] == b"\xff\xd8":
+        i = 2
+        while i + 9 < len(head):
+            if head[i] != 0xFF:
+                i += 1
+                continue
+            marker = head[i + 1]
+            if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+                return int.from_bytes(head[i + 7:i + 9], "big"), int.from_bytes(head[i + 5:i + 7], "big")
+            i += 2 + int.from_bytes(head[i + 2:i + 4], "big")
+    return None
+
+
 def svg_size(src):
-    """width and height from an svg's viewBox, so the page keeps the room for it while it loads"""
+    """width and height of an image, so the page keeps the room for it while it loads"""
     path = ROOT / src.lstrip("/")
-    if src.endswith(".svg") and path.is_file():
+    if not path.is_file():
+        return ""
+    if src.endswith(".svg"):
         m = re.search(r'viewBox="[\d.\-]+ [\d.\-]+ ([\d.]+) ([\d.]+)"', path.read_text(encoding="utf-8")[:2000])
         if m:
             return f' width="{round(float(m.group(1)))}" height="{round(float(m.group(2)))}"'
+        return ""
+    dims = raster_size(path)
+    if dims and all(dims):
+        return f' width="{dims[0]}" height="{dims[1]}"'
     return ""
 
 
@@ -437,6 +471,7 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
 <meta property="og:url" content="{canonical}">
 <meta property="og:image" content="{og}">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="{og}">
 <link rel="stylesheet" href="/assets/site.css">
 <script type="application/ld+json">{json.dumps(ld)}</script>
 </head>
