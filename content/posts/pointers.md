@@ -510,6 +510,4 @@ Print `sizeof(int *)` and `sizeof(int)`. This machine gave 8 and 4 (verified by 
 
 **How this was checked.** Compiled with gcc 13.3.0 on Ubuntu 24.04, x86-64, using `-std=c17 -Wall -Wextra`, at both `-O0` and `-O2`; all three programs printed identical output at both levels. The only compiler message was the `reassign` warning shown above, which is intended. The CUDA example is not compiled. Platform notes in the "seen elsewhere" column of table 3 come from general knowledge of other platforms and were not measured here.
 
-Based on [chapter 5 of Beej's Guide to C](https://beej.us/guide/bgc/html/split/pointers.html), rewritten with new examples and diagrams.
-
 ![](/assets/img/pointeres-dark-mode.png)
