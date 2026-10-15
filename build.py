@@ -814,7 +814,7 @@ def papers_page():
 
 
 def not_found():
-    body = f"""<main class="nf"><h1>404</h1><p>nothing here. <a href="/">back to the writing</a>.</p>{art("beasts")}</main>"""
+    body = f"""<main class="notfound"><h1>404</h1><p>nothing here. <a href="/">back to the writing</a>.</p>{art("beasts")}</main>"""
     write("/404.html", layout(title="not found", description="page not found.", path="/404.html", body=body, nav="", chrome=False))
 
 

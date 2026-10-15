@@ -331,9 +331,9 @@ h1.second { margin-top: 2.4rem; padding-top: 1.5rem; border-top: 1px solid var(-
 .tags { margin-top: 2.6rem; font-size: 1rem; color: var(--ink-faint); }
 .more { margin-top: 3.2rem; }
 
-.nf { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 1.5rem 0; }
-.nf h1 { margin: 0; font-size: clamp(3.4rem, 18vw, 6.4rem); line-height: 1; color: var(--accent); }
-.nf p { margin: 0.6rem 0 0; }
+.notfound { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 1.5rem 0; }
+.notfound h1 { margin: 0; font-size: clamp(3.4rem, 18vw, 6.4rem); line-height: 1; color: var(--accent); }
+.notfound p { margin: 0.6rem 0 0; }
 
 /* ------------------------------------------------------------- music */
 
@@ -409,10 +409,10 @@ main > .supper { width: 100%; max-width: 40rem; margin: 0 0 2.2rem; }
 .end { margin: 2.4rem 0 0; }
 .end .art { width: clamp(5.5rem, 32%, 8.5rem); margin: 0 auto; }
 /* the width is the smallest of: almost the screen, the column, and what keeps the picture under half the screen's height */
-.nf .art { width: min(92vw, 40rem, 86dvh); margin: 1.6rem 0 0; }
+.notfound .art { width: min(92vw, 40rem, 86dvh); margin: 1.6rem 0 0; }
 @media (max-height: 520px) {
-  .nf h1 { font-size: 3.2rem; }
-  .nf .art { margin-top: 0.8rem; }
+  .notfound h1 { font-size: 3.2rem; }
+  .notfound .art { margin-top: 0.8rem; }
 }
 
 /* the frieze runs under the footer, fading out at both ends so it has no hard edge */
