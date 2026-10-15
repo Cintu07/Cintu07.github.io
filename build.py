@@ -234,6 +234,7 @@ def render(body):
     )
     out = md.convert(body)
     out = re.sub(r'<p><img alt="([^"]*)" src="([^"]*)" ?/></p>', figure, out)
+    out = out.replace('<div class="hl"><pre>', '<div class="hl"><button class="copy" type="button" aria-label="copy this code">copy</button><pre>')
     out = re.sub(r"(<table>.*?</table>)", r'<div class="table-wrap">\1</div>', out, flags=re.S)
     return standfirst, out
 
@@ -276,6 +277,44 @@ def favourites():
 
 MUSIC_DIR = ROOT / "assets" / "music"
 AUDIO_TYPES = (".mp3", ".m4a", ".ogg", ".opus", ".wav")
+
+# A code block has a copy button in its corner. The click is handled once, on the document, so it keeps
+# working after a page swap replaces the markup. Without a clipboard (an old browser, a plain http page)
+# the text is selected in a hidden box and copied the old way.
+COPY_JS = r"""(function () {
+  document.documentElement.classList.add("can-copy");
+  function fallback(text) {
+    var t = document.createElement("textarea");
+    t.value = text;
+    t.setAttribute("readonly", "");
+    t.style.position = "fixed";
+    t.style.opacity = "0";
+    document.body.appendChild(t);
+    t.select();
+    var ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) {}
+    document.body.removeChild(t);
+    return ok;
+  }
+  function copy(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text).then(function () { return true; }, function () { return fallback(text); });
+    }
+    return Promise.resolve(fallback(text));
+  }
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("button.copy");
+    if (!b) return;
+    var pre = b.parentNode.querySelector("pre");
+    if (!pre) return;
+    copy(pre.textContent.replace(/\n$/, "")).then(function (ok) {
+      b.textContent = ok ? "copied" : "press ctrl c";
+      b.classList.add("done");
+      clearTimeout(b._t);
+      b._t = setTimeout(function () { b.textContent = "copy"; b.classList.remove("done"); }, 1600);
+    });
+  });
+})();"""
 
 # The song starts by itself when a page opens. A browser will not play sound before the visitor has touched
 # the page, so when it refuses the song is started muted, which is always allowed, and the first tap, click or
@@ -477,7 +516,7 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
 </head>
 <body{' class="has-music"' if music else ''}>
 {header_html}{body}
-{footer_html}{music}<script>{NAV_JS}</script>
+{footer_html}{music}<script>{COPY_JS}</script><script>{NAV_JS}</script>
 </body>
 </html>
 """

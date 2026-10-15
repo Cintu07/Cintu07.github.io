@@ -308,6 +308,19 @@ h1.second { margin-top: 2.4rem; padding-top: 1.5rem; border-top: 1px solid var(-
 .prose .code-caption + .hl pre, .prose .code-caption + pre { border-left-color: var(--edge-orange); }
 .prose pre code { background: none; padding: 0; font: inherit; overflow-wrap: normal; }
 
+/* a code block can be copied. the button sits in its corner: shown on hover or focus, and always on a touch screen */
+.prose .hl { position: relative; }
+.copy { display: none; }
+.can-copy .copy {
+  display: block; position: absolute; top: 0.35rem; right: 0.4rem; z-index: 1;
+  padding: 0.1rem 0.5rem; font: 0.62em/1.5 var(--mono); color: var(--ink-faint);
+  background: var(--paper); border: 1px solid var(--rule-strong); border-radius: 4px;
+  opacity: 0; cursor: pointer; transition: opacity 0.15s var(--ease), color 0.15s;
+}
+.can-copy .hl:hover .copy, .can-copy .copy:focus-visible, .can-copy .copy.done { opacity: 1; }
+.can-copy .copy:hover { color: var(--ink); }
+@media (hover: none) { .can-copy .copy { opacity: 0.85; } }
+
 .table-wrap { width: var(--wide); margin: 1.8em calc(50% - var(--wide) / 2); overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .prose table { width: 100%; border-collapse: collapse; font-family: "ET Book Lining", var(--serif); font-size: 0.92em; line-height: 1.45; font-variant-numeric: lining-nums tabular-nums; }
 .prose th { text-align: left; font-family: var(--display); font-weight: 400; padding: 0.5rem 1rem 0.55rem 0.7rem; border-bottom: 1.5px solid var(--ink); vertical-align: bottom; }
