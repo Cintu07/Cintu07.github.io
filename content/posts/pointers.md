@@ -5,10 +5,6 @@ description: pointers before cuda: what they are, what changes between machines,
 tags: c, cuda
 cover: /assets/img/pointeres-dark-mode.png
 ---
-15 oct, 2026 · c, cuda
-
-# pointers before cuda: what they are, what changes between machines, and where cuda uses them
-
 This post covers all of chapter 5 of Beej's Guide to C (pointers), then the parts of C that change from one machine to another, then the three places CUDA code leans on both. Each idea gets a rule, a short program, and the output that program printed.
 
 Every C program here was compiled with gcc 13.3 (`-std=c17 -Wall -Wextra`) on x86-64 Linux and run. Output blocks are pasted unchanged. The CUDA snippets were not compiled, because the machine used for this post has no `nvcc`. They are marked where they appear.
