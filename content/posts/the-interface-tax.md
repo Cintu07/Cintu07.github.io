@@ -1,5 +1,5 @@
 ---
-title: the interface tax
+title: the inference tax
 date: 2026-10-04
 description: inference larping maybe?
 tags: gpu, performance, ml compilers, tinygrad, vulkan
@@ -8,7 +8,7 @@ october 2026 / pawan
 
 every perf conversation i see online starts at the kernel. someone made a matmul faster, someone rewrote softmax in triton, someone posted a speedup graph with a nice green bar. and i get it, kernels are the fun part. but the more time i spend inside this stuff, the more i believe the kernel is rarely what decides how fast your program is. the first thing that decides it is the interface you describe the work through, and almost nobody questions that part.
 
-i've started calling it the interface tax. every layer you build on charges you something before your code even runs, and no amount of tuning underneath gets that money back.
+i've started calling it the inference tax. every layer you build on charges you something before your code even runs, and no amount of tuning underneath gets that money back.
 
 so here is a small exercise. take any computation and ask three things. what does the interface let me say? what does the hardware actually want? and what am i paying for the gap? let's do a few.
 
