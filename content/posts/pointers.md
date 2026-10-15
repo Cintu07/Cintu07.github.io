@@ -266,24 +266,35 @@ platform.c
 struct bad  { char a; int b; char c; };
 struct good { int b; char a; char c; };
 
+#define SHOW(t) printf("  %-10s %zu\n", #t, sizeof(t))
+
 int main(void) {
-    printf("char %zu  short %zu  int %zu  long %zu  long long %zu\n",
-           sizeof(char), sizeof(short), sizeof(int), sizeof(long), sizeof(long long));
-    printf("float %zu  double %zu  void* %zu  size_t %zu\n",
-           sizeof(float), sizeof(double), sizeof(void *), sizeof(size_t));
+    printf("sizes in bytes\n");
+    SHOW(char);
+    SHOW(short);
+    SHOW(int);
+    SHOW(long);
+    SHOW(long long);
+    SHOW(float);
+    SHOW(double);
+    SHOW(void *);
+    SHOW(size_t);
 
     uint32_t v = 0x01020304;
     unsigned char *bytes = (unsigned char *)&v;
-    printf("0x01020304 in memory: %02x %02x %02x %02x\n", bytes[0], bytes[1], bytes[2], bytes[3]);
-    printf("this machine is %s-endian\n", bytes[0] == 0x04 ? "little" : "big");
+    printf("\nbyte order\n");
+    printf("  0x01020304 in memory: %02x %02x %02x %02x\n", bytes[0], bytes[1], bytes[2], bytes[3]);
+    printf("  this machine is %s-endian\n", bytes[0] == 0x04 ? "little" : "big");
 
     char c = (char)200;
-    printf("char is %s (CHAR_MIN = %d), (char)200 reads back as %d\n",
-           CHAR_MIN < 0 ? "signed" : "unsigned", CHAR_MIN, c);
+    printf("\nplain char\n");
+    printf("  %s (CHAR_MIN = %d)\n", CHAR_MIN < 0 ? "signed" : "unsigned", CHAR_MIN);
+    printf("  (char)200 reads back as %d\n", c);
 
-    printf("struct bad:  size %zu, offsets a=%zu b=%zu c=%zu\n", sizeof(struct bad),
+    printf("\nstruct layout\n");
+    printf("  struct bad   size %2zu   a=%zu b=%zu c=%zu\n", sizeof(struct bad),
            offsetof(struct bad, a), offsetof(struct bad, b), offsetof(struct bad, c));
-    printf("struct good: size %zu, offsets b=%zu a=%zu c=%zu\n", sizeof(struct good),
+    printf("  struct good  size %2zu   b=%zu a=%zu c=%zu\n", sizeof(struct good),
            offsetof(struct good, b), offsetof(struct good, a), offsetof(struct good, c));
     return 0;
 }
@@ -293,13 +304,28 @@ output of platform.c, pasted unchanged
 {: .code-caption }
 
 ```text
-char 1  short 2  int 4  long 8  long long 8
-float 4  double 8  void* 8  size_t 8
-0x01020304 in memory: 04 03 02 01
-this machine is little-endian
-char is signed (CHAR_MIN = -128), (char)200 reads back as -56
-struct bad:  size 12, offsets a=0 b=4 c=8
-struct good: size 8, offsets b=0 a=4 c=5
+sizes in bytes
+  char       1
+  short      2
+  int        4
+  long       8
+  long long  8
+  float      4
+  double     8
+  void *     8
+  size_t     8
+
+byte order
+  0x01020304 in memory: 04 03 02 01
+  this machine is little-endian
+
+plain char
+  signed (CHAR_MIN = -128)
+  (char)200 reads back as -56
+
+struct layout
+  struct bad   size 12   a=0 b=4 c=8
+  struct good  size  8   b=0 a=4 c=5
 ```
 
 ### sizes
@@ -531,4 +557,4 @@ Print `sizeof(int *)` and `sizeof(int)`. This machine gave 8 and 4 (verified by 
 
 ---
 
-**How this was checked.** Compiled with gcc 13.3.0 on Ubuntu 24.04, x86-64, using `-std=c17 -Wall -Wextra`, at both `-O0` and `-O2`; all three programs printed identical output at both levels. The only compiler message was the `reassign` warning shown above, which is intended. The CUDA example is not compiled. Platform notes in the "seen elsewhere" column of table 3 come from general knowledge of other platforms and were not measured here.
+**How this was checked.** Compiled with gcc 13.3.0 on Ubuntu 24.04, x86-64, using `-std=c17 -Wall -Wextra`, at both `-O0` and `-O2`; all three programs printed identical output at both levels. `platform.c` was later reorganized and re-run on gcc 15.2.0, Ubuntu 26.04, x86-64, with the same flags and no compiler messages; it printed the same values as before. The only compiler message was the `reassign` warning shown above, which is intended. The CUDA example is not compiled. Platform notes in the "seen elsewhere" column of table 3 come from general knowledge of other platforms and were not measured here.
