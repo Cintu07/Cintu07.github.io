@@ -1,5 +1,5 @@
 ---
-title: reordering 2-bit numbers until a 27b model got 3.8x faster on a laptop cpu
+title: how i made a 27b ternary model 3.8x faster on a laptop cpu by reordering its bits
 date: 2026-10-17
 description: a 27b ternary model on a snapdragon x cpu, no gpu. prompts get read 3.8x faster and answers get written 1.5x faster, with the same output. how the kernel works, with the code.
 tags: C, SIMD, ARM, Inference, Quantization
