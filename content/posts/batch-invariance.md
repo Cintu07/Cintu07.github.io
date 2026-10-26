@@ -1,5 +1,5 @@
 ---
-title: the same token gets a different answer when my gpu checks it in a batch
+title: why speculative decoding changed my output
 date: 2026-10-26
 description: speculative decoding promises the exact output of the big model. on my laptop gpu it changed the text, because the big model's logits for a token depend on how many other tokens share the pass. the reasons, down to the warp and the attention block, and how each one was made bit-exact.
 tags: LLM Inference, GPU, CUDA, llama.cpp
