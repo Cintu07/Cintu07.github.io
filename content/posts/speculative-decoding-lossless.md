@@ -20,7 +20,7 @@ start with what one decoding step costs. to produce one token, an 8b model multi
 
 the math is small. about two operations per weight, so 16 billion for a token. the gpu could chew through that in a fraction of the time it spends waiting for the bytes to show up. my laptop's memory delivers about 286 gb/s in practice. 4.67 gb at 286 gb/s is 16.3 ms. so one token costs at least 16.3 ms, and plain decoding tops out around 61 tok/s. the measured number is 61.4.
 
-![fig. 01: one forward pass, drawn to scale. reading the weights is the whole cost, a second token in the same pass adds 2%.](/assets/img/hiraishin/fig-01.svg)
+![fig. 01: one forward pass, drawn to scale. reading the weights is the whole cost, a second token in the same pass adds 2%.](/assets/img/hiraishin/fig-01.png)
 
 look at the second bar in fig. 01. a forward pass with one token in it takes 19.1 ms in this measurement (it returns every logit, which adds a copy). the same pass with two tokens takes 19.5 ms. the second token costs 0.4 ms, 2% more, because the weights were already flowing through and the math for one more token barely registers.
 
@@ -100,7 +100,7 @@ the fix is a few lines. when a batched launch picks its block count, it asks for
 
 correctness was done. speed was a problem. stock llama.cpp had been fast at 6 to 9 tokens because it switched to the tiled matmul. my exact path stayed on the mat-vec, and the mat-vec with many columns is slow. verifying 9 tokens cost 3.33x a single token pass.
 
-![fig. 08: what one target pass costs as the batch grows. stock is cheap past 5 tokens because its sums are not exact.](/assets/img/hiraishin/fig-08.svg)
+![fig. 08: what one target pass costs as the batch grows. stock is cheap past 5 tokens because its sums are not exact.](/assets/img/hiraishin/fig-08.png)
 
 my first guess was that the kernel re-decodes the 4 bit weights once per column, so i wrote one that unpacks each weight block once and reuses it across all columns. it calls the exact same per column dot product functions as the stock kernel, so the arithmetic stays bit identical. it was slower. 2.70x at 8 tokens against 2.01x for the generic path.
 
@@ -126,7 +126,7 @@ a fixed draft length is a bad bet. stock speculative decoding with 8 guesses per
 
 the loop here stops drafting when the draft model is unsure. after each guess it looks at the gap between its top two logits, and if the gap is under 3 it stops and sends what it has. a confident draft runs long and an unsure one stops after a token or two.
 
-![fig. 07: one average cycle of the 45 prompt eval against plain decoding, drawn to scale.](/assets/img/hiraishin/fig-07.svg)
+![fig. 07: one average cycle of the 45 prompt eval against plain decoding, drawn to scale.](/assets/img/hiraishin/fig-07.png)
 
 fig. 07 is one average cycle over the whole eval, drawn to scale. 8.5 ms of drafting, 19.0 ms of verifying, 0.4 ms of bookkeeping, and 2.52 tokens out. that's 11.1 ms per token against 16.1 ms for plain decoding.
 
@@ -136,7 +136,7 @@ the 2.52 is the ceiling now. the kernels can still get faster, but the bigger le
 
 the first test set was 4 prompts. it found the bugs. it also flattered the result, because one of the 4 asked the model to copy its input. so the final numbers come from 45 prompts in 8 categories, up to 1024 tokens each, with inputs up to 2,639 tokens, all in one session on ac power.
 
-![fig. 09: 45 prompts in 8 categories, every speculative output checked token for token against plain decoding.](/assets/img/hiraishin/fig-09.svg)
+![fig. 09: 45 prompts in 8 categories, every speculative output checked token for token against plain decoding.](/assets/img/hiraishin/fig-09.png)
 
 | setup | mean tok/s | median | slowest 10% | outputs identical to plain |
 |---|---:|---:|---:|---|
