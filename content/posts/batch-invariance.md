@@ -3,6 +3,7 @@ title: why speculative decoding changed my output
 date: 2026-10-26
 description: greedy speculative decoding is supposed to reproduce the big model exactly. on my laptop it changed the text in 16 of 24 runs. the cause was three places where a gpu kernel adds the same numbers in a different order when tokens share a pass.
 tags: LLM Inference, GPU, CUDA, llama.cpp
+cover: /assets/img/batch-invariance-cover.png
 ---
 qwen3-8b, greedy decoding, an rtx 5060 laptop with 8 gb. plain decoding wrote "`get(key)` to retrieve a value by key." speculative decoding, same model, same prompt, wrote "`get(key)` to retrieve a value" and went off into a different sentence.
 
