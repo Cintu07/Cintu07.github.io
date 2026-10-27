@@ -200,6 +200,8 @@ h1 { margin: 0 0 0.6rem; font-size: clamp(1.75rem, 1.2rem + 2.6vw, 2.35rem); }
 h2 { margin: 2.4rem 0 0.7rem; font-size: clamp(1.3rem, 1.1rem + 1vw, 1.6rem); }
 h3 { margin: 1.9rem 0 0.5rem; font-size: clamp(1.15rem, 1.05rem + 0.5vw, 1.3rem); }
 p { margin: 0 0 1.05em; text-wrap: pretty; }
+/* body text runs edge to edge, and words are never split with a hyphen */
+.prose p, .prose li, .standfirst { text-align: justify; text-justify: inter-word; hyphens: none; -webkit-hyphens: none; }
 strong { font-weight: 700; }
 
 .byline { margin: 0 0 1.6rem; font-size: 1.02rem; color: var(--ink-faint); }

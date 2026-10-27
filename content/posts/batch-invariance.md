@@ -8,7 +8,7 @@ qwen3-8b, greedy decoding, an rtx 5060 laptop with 8 gb. plain decoding wrote "`
 
 it wasn't a fluke. out of 24 speculative runs, 8 matched plain decoding and 16 didn't. rerun a mismatch and it broke at the same byte, every time.
 
-code, patches and logs: [github.com/Cintu07/hiraishin](https://github.com/Cintu07/hiraishin).
+[github.com/Cintu07/hiraishin](https://github.com/Cintu07/hiraishin) has the code, the patches and every log.
 
 ![fig. 1: one forward pass on this laptop, drawn to scale. the read of the weights is almost the whole cost, so a second token in the same pass is nearly free.](/assets/img/hiraishin/fig-01.png)
 
