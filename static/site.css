@@ -523,3 +523,6 @@ figure.code code { background: none; padding: 0; font: inherit; }
 .hello h1 { font-size: clamp(28px, 7.2vw, 40px); line-height: 1.06; letter-spacing: -.015em; }
 .prose h2 { font-size: 24px; }
 .card h3 { font-size: 20px; }
+
+/* the intro is three lines of large type: justifying it opens gaps, so it stays ragged */
+.intro-pc .say, .hello .lede { text-align: left; hyphens: manual; }
