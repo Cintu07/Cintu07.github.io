@@ -110,15 +110,6 @@ export function startBanner(canvas, subtitle) {
       ctx.fillStyle = th.sky[0];
       ctx.beginPath(); ctx.arc(X(0.16) + H * 0.03, Y(0.22) - H * 0.015, H * 0.065, 0, Math.PI * 2); ctx.fill();
     }
-    // thin high cloud streaks
-    ctx.fillStyle = th.cloud[2];
-    for (const wsp of wisps) {
-      const x = ((wsp.x + t * wsp.speed) % 1.3) - 0.15;
-      ctx.globalAlpha = 0.65;
-      ctx.fillRect(X(x), Y(wsp.y), X(wsp.len), Math.max(2, H * 0.01));
-      ctx.fillRect(X(x + wsp.len * 0.2), Y(wsp.y) + H * 0.016, X(wsp.len * 0.6), Math.max(2, H * 0.008));
-    }
-    ctx.globalAlpha = 1;
     // far city, then the near rooftops with lit windows
     ctx.fillStyle = th.far;
     for (const [x, w, h] of city) ctx.fillRect(X(x), Y(0.84 - h), X(w) + 1, Y(h) + Y(0.2));
