@@ -87,91 +87,105 @@ export function startBanner(canvas, subtitle) {
     return arms;
   }
 
+  // Everything that does not move is drawn once into cached layers; a frame only stamps those
+  // and draws what moves (train, birds, wires, twinkling stars). Rebuilt on resize or theme change.
+  let layers = null;
+  const layer = () => { const c = document.createElement('canvas'); c.width = W; c.height = H; return [c, c.getContext('2d')]; };
+  function buildLayers() {
+    const th = theme;
+    const [bg, b] = layer();
+    const sky = b.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, th.sky[0]); sky.addColorStop(0.55, th.sky[1]); sky.addColorStop(1, th.sky[2]);
+    b.fillStyle = sky; b.fillRect(0, 0, W, H);
+    const glow = b.createRadialGradient(X(0.82), Y(0.82), 0, X(0.82), Y(0.82), W * 0.45);
+    glow.addColorStop(0, th.glow); glow.addColorStop(1, 'rgba(0,0,0,0)');
+    b.fillStyle = glow; b.fillRect(0, 0, W, H);
+    if (th.stars) {
+      b.fillStyle = '#efe2c4';
+      for (const [sx, sy, tw] of stars) if (tw > 0.25) { b.globalAlpha = 0.35 + tw * 0.5; b.fillRect(X(sx), Y(sy), dpr * 1.4, dpr * 1.4); }
+      b.globalAlpha = 1;
+      b.fillStyle = '#f2ecd8';
+      b.beginPath(); b.arc(X(0.16), Y(0.22), H * 0.07, 0, Math.PI * 2); b.fill();
+      b.fillStyle = th.sky[0];
+      b.beginPath(); b.arc(X(0.16) + H * 0.03, Y(0.22) - H * 0.015, H * 0.065, 0, Math.PI * 2); b.fill();
+    }
+    b.fillStyle = th.far;
+    for (const [x, w, h] of city) b.fillRect(X(x), Y(0.84 - h), X(w) + 1, Y(h) + Y(0.2));
+    b.fillStyle = th.mid;
+    b.fillRect(0, Y(TRACK), W, H * 0.018);
+    for (let x = 0.03; x < 1; x += 0.09) b.fillRect(X(x), Y(TRACK), W * 0.008, H);
+    // the rooftops in front of the train, with their lit windows at night
+    const [fg, f] = layer();
+    f.fillStyle = th.ink;
+    for (const [x, w, h, lit] of near) {
+      f.fillRect(X(x), Y(0.93 - h), X(w) + 1, H);
+      if (th.stars && lit > 0.4) {
+        f.fillStyle = th.lit;
+        for (let k = 0; k < 3; ++k) if ((lit * 10 + k) % 2 > 0.8) f.fillRect(X(x + w * (0.2 + k * 0.25)), Y(0.95 - h), X(w * 0.12), Y(0.012));
+        f.fillStyle = th.ink;
+      }
+    }
+    // film grain and a vignette, baked once
+    const [fx, v] = layer();
+    v.globalAlpha = th.grain;
+    v.fillStyle = v.createPattern(grain, 'repeat');
+    v.save(); v.scale(dpr, dpr); v.fillRect(0, 0, W / dpr, H / dpr); v.restore();
+    v.globalAlpha = 1;
+    const vig = v.createRadialGradient(W / 2, H / 2, H * 0.4, W / 2, H / 2, W * 0.65);
+    vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, th.stars ? 'rgba(0,0,0,.45)' : 'rgba(60,40,10,.22)');
+    v.fillStyle = vig; v.fillRect(0, 0, W, H);
+    layers = { bg, fg, fx, theme: th, W, H };
+  }
+  const TRACK = 0.8;
+
   function frame(t) {
     const th = theme;
-    // sky
-    const sky = ctx.createLinearGradient(0, 0, 0, H);
-    sky.addColorStop(0, th.sky[0]); sky.addColorStop(0.55, th.sky[1]); sky.addColorStop(1, th.sky[2]);
-    ctx.fillStyle = sky;
-    ctx.fillRect(0, 0, W, H);
-    const glow = ctx.createRadialGradient(X(0.82), Y(0.82), 0, X(0.82), Y(0.82), W * 0.45);
-    glow.addColorStop(0, th.glow); glow.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = glow;
-    ctx.fillRect(0, 0, W, H);
+    if (!layers || layers.theme !== th || layers.W !== W || layers.H !== H) buildLayers();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.drawImage(layers.bg, 0, 0);
     if (th.stars) {
-      for (const [sx, sy, tw] of stars) {
-        ctx.globalAlpha = 0.4 + 0.6 * Math.abs(Math.sin(t * 0.8 + tw * 9));
-        ctx.fillStyle = '#efe2c4';
-        ctx.fillRect(X(sx), Y(sy), dpr * 1.4, dpr * 1.4);
-      }
+      ctx.fillStyle = '#efe2c4';
+      for (const [sx, sy, tw] of stars) if (tw <= 0.25) { ctx.globalAlpha = 0.3 + 0.7 * Math.abs(Math.sin(t * 0.8 + tw * 40)); ctx.fillRect(X(sx), Y(sy), dpr * 1.4, dpr * 1.4); }
       ctx.globalAlpha = 1;
-      ctx.fillStyle = '#f2ecd8';
-      ctx.beginPath(); ctx.arc(X(0.16), Y(0.22), H * 0.07, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = th.sky[0];
-      ctx.beginPath(); ctx.arc(X(0.16) + H * 0.03, Y(0.22) - H * 0.015, H * 0.065, 0, Math.PI * 2); ctx.fill();
     }
-    // far city, then the near rooftops with lit windows
-    ctx.fillStyle = th.far;
-    for (const [x, w, h] of city) ctx.fillRect(X(x), Y(0.84 - h), X(w) + 1, Y(h) + Y(0.2));
-    // the elevated track, and a train crossing every fourteen seconds
-    const trackY = 0.8;
-    ctx.fillStyle = th.mid;
-    ctx.fillRect(0, Y(trackY), W, H * 0.018);
-    for (let x = 0.03; x < 1; x += 0.09) ctx.fillRect(X(x), Y(trackY), W * 0.008, H);
+    // a train crossing every fourteen seconds
     const phase = (t % 14) / 14;
     if (phase < 0.6) {
       const tx = -0.5 + phase / 0.6 * 1.8;
       for (let car = 0; car < 4; ++car) {
-        const cx = X(tx + car * 0.125), cw = X(0.12), cy = Y(trackY - 0.075);
+        const cx = X(tx + car * 0.125), cw = X(0.12), cy = Y(TRACK - 0.075);
         ctx.fillStyle = th.ink;
         ctx.fillRect(cx, cy, cw, Y(0.072));
         ctx.fillStyle = th.lit;
         for (let w = 0; w < 5; ++w) ctx.fillRect(cx + cw * (0.08 + w * 0.18), cy + Y(0.016), cw * 0.11, Y(0.022));
       }
     }
-    ctx.fillStyle = th.ink;
-    for (const [x, w, h, lit] of near) {
-      ctx.fillRect(X(x), Y(0.93 - h), X(w) + 1, H);
-      if (th.stars && lit > 0.4) {
-        ctx.fillStyle = th.lit;
-        for (let k = 0; k < 3; ++k) if ((lit * 10 + k) % 2 > 0.8) ctx.fillRect(X(x + w * (0.2 + k * 0.25)), Y(0.95 - h), X(w * 0.12), Y(0.012));
-        ctx.fillStyle = th.ink;
-      }
-    }
+    ctx.drawImage(layers.fg, 0, 0);
     // birds, a small flock going home
     const bx = ((t * 0.035) % 1.4) - 0.2;
     ctx.strokeStyle = th.ink;
     ctx.lineWidth = Math.max(1.2, dpr * 1.3);
+    ctx.beginPath();
     for (const [ox, oy, f] of birds) {
       const x = X(bx + ox), y = Y(0.3 + oy + Math.sin(t + f) * 0.008), s = H * 0.014, flap = Math.sin(t * 9 + f) * s * 0.6;
-      ctx.beginPath(); ctx.moveTo(x - s, y - flap); ctx.lineTo(x, y); ctx.lineTo(x + s, y - flap); ctx.stroke();
+      ctx.moveTo(x - s, y - flap); ctx.lineTo(x, y); ctx.lineTo(x + s, y - flap);
     }
+    ctx.stroke();
     // poles in the foreground, wires sagging between them and off the edges
     const a = pole(0.1, 0.12), b = pole(0.9, 0.2);
     ctx.strokeStyle = th.wire;
     ctx.lineWidth = Math.max(1, dpr * 1.2);
     const sway = Math.sin(t * 0.7) * H * 0.006;
+    ctx.beginPath();
     a.forEach((p, i) => {
       const q = b[i];
-      ctx.beginPath();
       ctx.moveTo(-10, p[1] + H * 0.05);
       ctx.quadraticCurveTo((p[0] - 10) / 2, p[1] + H * 0.09 + sway, p[0], p[1]);
       ctx.quadraticCurveTo((p[0] + q[0]) / 2, (p[1] + q[1]) / 2 + H * 0.16 + sway, q[0], q[1]);
       ctx.quadraticCurveTo((q[0] + W) / 2, q[1] + H * 0.08 + sway, W + 10, q[1] + H * 0.03);
-      ctx.stroke();
     });
-    // grain and a soft vignette, like film run through a cheap scanner
-    ctx.globalAlpha = th.grain;
-    ctx.globalCompositeOperation = 'overlay';
-    const ox = Math.floor(rnd() * 160), oy = Math.floor(rnd() * 160);
-    ctx.fillStyle = ctx.createPattern(grain, 'repeat');
-    ctx.save(); ctx.translate(-ox, -oy); ctx.scale(dpr, dpr); ctx.fillRect(0, 0, W / dpr + 160, H / dpr + 160); ctx.restore();
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = 1;
-    const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.4, W / 2, H / 2, W * 0.65);
-    vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, th.stars ? 'rgba(0,0,0,.45)' : 'rgba(60,40,10,.22)');
-    ctx.fillStyle = vig;
-    ctx.fillRect(0, 0, W, H);
+    ctx.stroke();
+    ctx.drawImage(layers.fx, 0, 0);
   }
 
   // subtitles: typed in, held, then the next line
@@ -187,7 +201,7 @@ export function startBanner(canvas, subtitle) {
   new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(canvas);
   const loop = (now) => {
     requestAnimationFrame(loop);
-    if (!visible || document.hidden || now - last < 33) return;
+    if (!visible || document.hidden || now - last < 41) return;
     last = now;
     const t = now / 1000;
     frame(t);
