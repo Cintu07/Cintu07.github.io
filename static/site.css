@@ -510,3 +510,16 @@ figure.code code { background: none; padding: 0; font: inherit; }
   .intro-pc { grid-template-columns: minmax(0, 34em) minmax(300px, 500px); justify-content: center; gap: clamp(32px, 5vw, 96px); }
   .heroart { max-width: 500px; justify-self: start; }
 }
+
+/* justified text: every line of running text ends at the same right edge, hyphenated so the spacing stays even */
+.prose p, .prose li, .intro-pc .say, .hello .lede, .card .desc, .paper p, .bookrow p, .rows p, .pg .pb, .standfirst {
+  text-align: justify; hyphens: auto; -webkit-hyphens: auto; hyphenate-limit-chars: 6 3 3; text-wrap: wrap;
+}
+/* very narrow columns get rivers when justified; let them run ragged instead */
+@media (max-width: 380px) { .card .desc, .rows p { text-align: left; hyphens: manual; } }
+
+/* mid-sized headings: the title leads, it does not shout */
+.w-reader h1 { font-size: clamp(26px, 2.9vw, 36px); line-height: 1.12; letter-spacing: -.01em; }
+.hello h1 { font-size: clamp(28px, 7.2vw, 40px); line-height: 1.06; letter-spacing: -.015em; }
+.prose h2 { font-size: 24px; }
+.card h3 { font-size: 20px; }

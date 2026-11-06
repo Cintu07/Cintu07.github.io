@@ -183,7 +183,7 @@ async function main() {
   write('/posts.json', JSON.stringify(posts.map((p) => ({ title: p.title, url: SITE + p.url, date: p.iso, description: p.description, tags: p.tags, minutes: p.minutes }))));
   // link-preview cards: pages for build/og.mjs to photograph, and the photos it made earlier
   for (const p of posts) write(`/og/${p.slug}/`, ogCard({ title: titleWithUnderline(p.title), kicker: `${p.slug}.md`, art: p.art, palette: p.palette, foot: { tags: p.tags.slice(0, 3), line: `${caps(p.date)} · ${p.minutes} MIN READ · cintu07.github.io` } }));
-  write('/og/home/', ogCard({ title: 'i build database and inference stuff and <u>break</u> it a lot.', kicker: 'welcome', art: posts[0].art, palette: 'night', foot: { tags: ['writing', 'papers', 'books'], line: 'pawan · cintu07.github.io' } }));
+  write('/og/home/', ogCard({ title: 'i build database and inference stuff and <u>break</u> it a lot.', kicker: 'welcome', art: art.hero, palette: 'paper', foot: { tags: ['writing', 'papers', 'books'], line: 'pawan · cintu07.github.io' } }));
   if (existsSync(join(ROOT, 'assets/og'))) cpSync(join(ROOT, 'assets/og'), join(DIST, 'assets/og'), { recursive: true });
   console.log(`built in ${Date.now() - t0} ms`);
 }
