@@ -19,12 +19,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-node@v4
         with:
-          python-version: "3.12"
-          cache: pip
-      - run: pip install -r requirements.txt
-      - run: python build.py
+          node-version: 22
+          cache: npm
+      # generated art is cached between builds; it only re-renders when the renderer changes
+      - uses: actions/cache@v4
+        with:
+          path: .cache/art
+          key: art-${{ hashFiles('build/art.mjs', 'build/dither.mjs') }}
+      - run: npm ci
+      - run: node build/build.mjs
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
