@@ -8,6 +8,7 @@
     "dev": "node build/build.mjs && node build/serve.mjs"
   },
   "dependencies": {
+    "esbuild": "^0.24.0",
     "highlight.js": "11.10.0",
     "marked": "14.1.3",
     "sharp": "0.33.5"

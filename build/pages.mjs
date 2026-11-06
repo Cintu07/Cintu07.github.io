@@ -38,15 +38,36 @@ const ICON_GRIDS = {
   bin: ['....########....', '.##############.', '..############..', '..#..#..#..#.#..', '..#..#..#..#.#..', '..#..#..#..#.#..', '..#..#..#..#.#..', '..#..#..#..#.#..', '..#..#..#..#.#..', '..#..#..#..#.#..', '..############..'],
   moon: ['.....######.....', '...##++++++##...', '..#+++++++++.#..', '.#++++++++++..#.', '.#+++++++++...#.', '#++++++++++....#', '#+++++++++.....#', '#+++++++++.....#', '#++++++++++....#', '.#+++++++++...#.', '.#++++++++++..#.', '..#+++++++++.#..', '...##++++++##...', '.....######.....'],
 };
-export function icon(name, scale = 3) {
+// each icon is drawn once per page as a <symbol>; every use of it is a two-tag <use>.
+// runs of pixels merge into one rect, so a symbol is a few dozen rects, not hundreds.
+const usedIcons = new Set();
+function iconSymbol(name) {
   const rows = ICON_GRIDS[name];
   const w = Math.max(...rows.map((r) => r.length)), h = rows.length;
-  let rects = '';
-  rows.forEach((row, y) => [...row].forEach((c, x) => {
-    if (c === '#') rects += `<rect x="${x}" y="${y}" width="1" height="1"/>`;
-    else if (c === '+') rects += `<rect class="f" x="${x}" y="${y}" width="1" height="1"/>`;
-  }));
-  return `<svg class="px" viewBox="0 0 ${w} ${h}" width="${w * scale}" height="${h * scale}" shape-rendering="crispEdges" aria-hidden="true">${rects}</svg>`;
+  let ink = '', fill = '';
+  rows.forEach((row, y) => {
+    for (let x = 0; x < row.length;) {
+      const c = row[x];
+      if (c === '.') { ++x; continue; }
+      let run = 1;
+      while (row[x + run] === c) ++run;
+      const rect = `M${x} ${y}h${run}v1h-${run}z`;
+      if (c === '#') ink += rect; else fill += rect;
+      x += run;
+    }
+  });
+  return `<symbol id="i-${name}" viewBox="0 0 ${w} ${h}"><path d="${ink}" fill="currentColor"/>${fill ? `<path d="${fill}" style="fill:var(--f)"/>` : ''}</symbol>`;
+}
+export function icon(name, scale = 3) {
+  usedIcons.add(name);
+  const rows = ICON_GRIDS[name];
+  const w = Math.max(...rows.map((r) => r.length)), h = rows.length;
+  return `<svg class="px" width="${w * scale}" height="${h * scale}" shape-rendering="crispEdges" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+}
+function iconSprite() {
+  const sprite = `<svg width="0" height="0" style="position:absolute" aria-hidden="true">${[...usedIcons].map(iconSymbol).join('')}</svg>`;
+  usedIcons.clear();
+  return sprite;
 }
 
 // ---------------------------------------------------------------- pieces
@@ -89,7 +110,11 @@ ${mask(p.art, 'art')}
 
 const MARQUEE = '▷ i know the bugs will be found. ◆ i build database and inference stuff and break it a lot. ◆ this is where i write down why. ◆ every number here was printed by a program that ran. (￣┰￣*) ◆ ';
 
-export function page({ title, description, path, body, nav = '', ctx, og = '/assets/og/home.png', bodyClass = '' }) {
+export function page(opts) {
+  const html = pageHtml(opts);
+  return html.replace(/(<body[^>]*>)/, `$1${iconSprite()}`);
+}
+function pageHtml({ title, description, path, body, nav = '', ctx, og = '/assets/og/home.png', bodyClass = '' }) {
   const full = path === '/' ? NAME : `${title} · ${NAME}`;
   const latest = ctx.posts[0];
   const tasks = (ctx.tasks ?? []).map(([id, t, g]) => `<button class="task" type="button" data-win="${id}">${icon(g, 1)}<span>${esc(t)}</span></button>`).join('');
@@ -111,6 +136,7 @@ export function page({ title, description, path, body, nav = '', ctx, og = '/ass
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="preload" href="/assets/fonts/dotgothic16.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/assets/fonts/zilla-slab-600.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/et-book-roman-lining.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/static/site.css">
 <script>(function(){try{var t=localStorage.getItem('pawan-theme');if(t)document.documentElement.dataset.theme=t;else if(matchMedia('(prefers-color-scheme: dark)').matches)document.documentElement.dataset.theme='night';}catch(e){}})();</script>
 </head>
@@ -143,6 +169,7 @@ ${ctx.books.length ? `<li><a role="menuitem" href="/books/">${icon('books', 2)}<
 ${ctx.music ? `<audio id="music" src="${ctx.music}" preload="none" loop></audio>` : ''}
 <canvas class="trail" aria-hidden="true"></canvas>
 <div class="saver" hidden><canvas></canvas><p>move the mouse to come back</p></div>
+<script type="speculationrules">{"prerender":[{"where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":"/assets/*"}}]},"eagerness":"moderate"}]}</script>
 <script type="module" src="/static/os.js"></script>
 </body>
 </html>`;

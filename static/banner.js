@@ -47,7 +47,7 @@ export function startBanner(canvas, subtitle) {
   pickTheme();
   addEventListener('themechange', pickTheme);
   const size = () => {
-    dpr = Math.min(3, devicePixelRatio || 1);
+    dpr = Math.min(innerWidth < 720 ? 2 : 3, devicePixelRatio || 1);
     // layout size, not the on-screen rect: the window may still be mid zoom-in when this runs
     W = canvas.width = Math.round(canvas.clientWidth * dpr);
     H = canvas.height = Math.round(canvas.clientHeight * dpr);

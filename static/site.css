@@ -42,7 +42,6 @@ body {
   background-image: radial-gradient(var(--desk-dot) 1px, transparent 1.2px);
   background-size: 6px 6px;
   padding-bottom: 52px;
-  transition: background-color .3s;
 }
 a { color: inherit; }
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
@@ -50,7 +49,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .skip { position: absolute; left: -999px; top: 0; }
 .skip:focus { left: 8px; z-index: 100; background: var(--hi); padding: 6px 10px; }
 svg.px { display: block; fill: currentColor; }
-svg.px .f { fill: var(--paper, var(--hi)); }
+svg.px { --f: var(--paper, var(--hi)); }
 u { text-decoration-thickness: 2px; text-underline-offset: 4px; }
 
 /* ---------------------------------------------------------------- marquee */
@@ -70,12 +69,6 @@ u { text-decoration-thickness: 2px; text-underline-offset: 4px; }
   display: flex; flex-direction: column; min-width: 0;
   transition: box-shadow .15s;
 }
-/* windows open with a stepped zoom, one after another */
-.desktop .win { animation: open .42s steps(5) both; }
-.wins > .win:nth-child(2), .col .win:nth-child(1) { animation-delay: .08s; }
-.wins > .win:nth-child(3), .col .win:nth-child(2) { animation-delay: .16s; }
-.col .win:nth-child(3) { animation-delay: .24s; }
-@keyframes open { from { transform: scale(.2); opacity: 0; } to { transform: none; opacity: 1; } }
 .win.dragging { box-shadow: 12px 12px 0 var(--shadow); z-index: 20; cursor: grabbing; }
 .win.focused { z-index: 10; }
 .win .bar {
@@ -89,7 +82,7 @@ u { text-decoration-thickness: 2px; text-underline-offset: 4px; }
   font: 15px/1 var(--ui); letter-spacing: .02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
 }
 .win .bar .title svg { fill: var(--paper); flex: none; }
-.win .bar .title svg .f { fill: var(--ink); }
+.win .bar .title svg { --f: var(--ink); }
 .win .ctl { margin-left: auto; display: flex; gap: 3px; flex: none; }
 .win .ctl button {
   width: 22px; height: 20px; display: grid; place-items: center; font: 15px/1 var(--ui);
@@ -130,7 +123,7 @@ u { text-decoration-thickness: 2px; text-underline-offset: 4px; }
   display: flex; flex-direction: column; align-items: center; gap: 6px; width: 92px; flex: none; padding: 8px 4px;
   text-decoration: none; color: var(--desk-ink); font: 13px/1.2 var(--ui); text-align: center;
 }
-.ico svg { --paper: var(--desk); }
+.ico svg { --f: var(--desk); }
 .ico span { padding: 1px 4px; }
 .ico:hover span, .ico:focus-visible span { background: var(--chrome); color: var(--desk); }
 .ico:hover svg { filter: drop-shadow(2px 2px 0 var(--desk-dot)); }
@@ -318,7 +311,7 @@ figure.code code { background: none; padding: 0; font: inherit; }
 .startmenu ul { list-style: none; margin: 0; padding: 6px; flex: 1; }
 .startmenu a, .startmenu button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 7px 10px; text-decoration: none; font: 15px/1 var(--ui); }
 .startmenu a:hover, .startmenu button:hover, .startmenu a:focus-visible, .startmenu button:focus-visible { background: var(--chrome); color: var(--desk); }
-.startmenu svg { --paper: var(--hi); }
+.startmenu svg { --f: var(--hi); }
 .startmenu .sep { border-top: 2px dashed var(--desk-dot); margin: 6px 0; }
 
 /* ---------------------------------------------------------------- overlays */
@@ -526,3 +519,22 @@ figure.code code { background: none; padding: 0; font: inherit; }
 
 /* the intro is three lines of large type: justifying it opens gaps, so it stays ragged */
 .intro-pc .say, .hello .lede { text-align: left; hyphens: manual; }
+
+/* ---------------------------------------------------------------- speed: skip rendering what is off screen */
+.card { content-visibility: auto; contain-intrinsic-size: auto 520px; }
+.prose > h2, .prose > p, .prose > figure, .prose > ul, .prose > ol, .prose > table { content-visibility: auto; contain-intrinsic-size: auto 120px; }
+
+/* ---------------------------------------------------------------- phones: a proper dock */
+@media (max-width: 720px) {
+  body { padding-bottom: calc(66px + env(safe-area-inset-bottom)); }
+  .taskbar { height: auto; padding: 7px 8px calc(7px + env(safe-area-inset-bottom)); gap: 8px; }
+  .taskbar .start { height: 46px; padding: 0 16px; gap: 10px; font-size: 16px; }
+  .taskbar .start svg { width: 22px; height: 22px; }
+  .taskbar .start b::after { content: " ▴"; font-size: 11px; vertical-align: 2px; }
+  .taskbar .tray { height: 46px; padding: 0; gap: 0; box-shadow: none; border: 0; background: none; }
+  .tray-music, .tray-theme { width: 46px; height: 46px; display: grid; place-items: center; border: 2px solid var(--chrome); box-shadow: inset -2px -2px 0 var(--desk-dot); background: var(--hi); font-size: 18px; margin-left: 6px; }
+  .tray .clock { height: 46px; display: grid; place-items: center; padding: 0 12px; margin-left: 6px; border: 2px solid var(--chrome); box-shadow: inset 2px 2px 0 var(--desk-dot); font-size: 21px; min-width: 0; }
+  .startmenu { left: 8px; right: 8px; bottom: calc(68px + env(safe-area-inset-bottom)); min-width: 0; }
+  .startmenu a, .startmenu button { padding: 13px 12px; font-size: 17px; }
+}
+@media (max-width: 360px) { .tray .clock { display: none; } }

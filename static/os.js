@@ -302,9 +302,13 @@ if (prose) {
 }
 
 // ---------------------------------------------------------------- live art
-$$('canvas.moon').forEach((c) => startMoon(c));
+// the live art waits until the page has painted, so nothing it does can delay the first screen
+const later = (fn) => (window.requestIdleCallback ? requestIdleCallback(fn, { timeout: 600 }) : setTimeout(fn, 120));
+later(() => {
+  $$('canvas.moon').forEach((c) => startMoon(c));
 $$('canvas.anime').forEach((c) => startBanner(c, c.parentElement.querySelector('.sub')));
-$$('canvas.room').forEach((c) => startRoom(c));
+  $$('canvas.room').forEach((c) => startRoom(c));
+});
 if (!reduced && matchMedia('(pointer: fine)').matches) startTrail($('.trail'));
 
 // ---------------------------------------------------------------- screensaver after a minute and a half idle
@@ -313,33 +317,3 @@ let idle;
 const wake = () => { clearTimeout(idle); if (saver.visible) saver.hide(); idle = setTimeout(() => !reduced && saver.show(), 90_000); };
 ['pointermove', 'pointerdown', 'keydown', 'wheel', 'touchstart', 'scroll'].forEach((ev) => addEventListener(ev, wake, { passive: true }));
 wake();
-
-// ---------------------------------------------------------------- boot, once per visit, home only
-if (document.body.classList.contains('home') && !reduced && store.once('pawan-booted')) {
-  const boot = document.createElement('div');
-  boot.className = 'boot';
-  boot.setAttribute('aria-hidden', 'true');
-  const lines = [
-    'PAWAN BIOS v26.11  (C) 2026 cintu07',
-    '',
-    'CPU   : snapdragon x / i7-13650hx ........ OK',
-    'MEMORY: 16384K ........................... OK',
-    'GPU   : adreno 630 (emulated in numpy) ... OK',
-    'LOAD  : writing.dat  papers.dat  moon.1bit',
-    '',
-    'starting PAWAN.SYS',
-  ];
-  const pre = document.createElement('pre');
-  boot.append(pre);
-  document.body.append(boot);
-  let i = 0;
-  const finish = () => { boot.classList.add('done'); setTimeout(() => boot.remove(), 400); removeEventListener('keydown', finish); };
-  boot.addEventListener('pointerdown', finish);
-  addEventListener('keydown', finish);
-  const step = () => {
-    if (i >= lines.length) { pre.innerHTML += '<span class="cursor">█</span>'; setTimeout(finish, 450); return; }
-    pre.textContent += lines[i++] + '\n';
-    setTimeout(step, i === 1 ? 260 : 120);
-  };
-  step();
-}

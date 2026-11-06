@@ -7,6 +7,7 @@ import { createHash } from 'crypto';
 import { marked } from 'marked';
 import hljs from 'highlight.js';
 import sharp from 'sharp';
+import { transform } from 'esbuild';
 import { render, sceneFor } from './art.mjs';
 import { loadGray, atkinson, writeMask } from './dither.mjs';
 import { page, home, article, papersPage, booksPage, notFound, PALETTES, paletteFor, ogCard, titleWithUnderline, caps } from './pages.mjs';
@@ -15,7 +16,12 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = join(ROOT, 'dist'), CONTENT = join(ROOT, 'content'), CACHE = join(ROOT, '.cache', 'art');
 export const SITE = 'https://cintu07.github.io';
 
+// the stylesheet is small, so every page carries it inline: no extra round trip before the first paint
+let inlineCss = null;
 const write = (path, text) => {
+  if (inlineCss === null && existsSync(join(DIST, 'static/site.css'))) inlineCss = readFileSync(join(DIST, 'static/site.css'), 'utf8');
+  const link = '<link rel="stylesheet" href="/static/site.css">';
+  if (inlineCss && text.includes(link)) text = text.replace(link, () => `<style>${inlineCss}</style>`);
   const file = join(DIST, path.endsWith('/') ? path + 'index.html' : path);
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, text);
@@ -151,6 +157,14 @@ async function main() {
   mkdirSync(DIST, { recursive: true });
   for (const dir of ['fonts', 'img', 'books', 'music']) cpSync(join(ROOT, 'assets', dir), join(DIST, 'assets', dir), { recursive: true });
   cpSync(join(ROOT, 'static'), join(DIST, 'static'), { recursive: true });
+  // minified on the way out; the sources in static/ stay readable
+  for (const f of readdirSync(join(DIST, 'static'))) {
+    const loader = { '.js': 'js', '.css': 'css' }[extname(f)];
+    if (!loader) continue;
+    const file = join(DIST, 'static', f);
+    const { code } = await transform(readFileSync(file, 'utf8'), { loader, minify: true, format: loader === 'js' ? 'esm' : undefined, target: ['es2022', 'chrome110', 'safari16', 'firefox115'] });
+    writeFileSync(file, code);
+  }
 
   const posts = loadPosts();
   console.log(`${posts.length} posts`);
