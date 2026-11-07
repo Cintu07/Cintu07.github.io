@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="en" data-theme="day">
+<head><meta name="robots" content="noindex">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>pointers before cuda: what they are, what changes between machines, and where cuda uses them · pawan</title>
+<meta name="description" content="what an address is, what changes between machines, and where cuda needs both.">
+<link rel="canonical" href="https://cintu07.github.io/archive/posts/pointers/">
+<meta property="og:title" content="pointers before cuda: what they are, what changes between machines, and where cuda uses them">
+<meta property="og:description" content="what an address is, what changes between machines, and where cuda needs both.">
+<meta property="og:image" content="https://cintu07.github.io/archive/assets/og/pointers.png">
+<meta property="og:url" content="https://cintu07.github.io/archive/posts/pointers/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#ece6d6" id="theme-color">
+<link rel="alternate" type="application/atom+xml" href="/feed.xml" title="pawan">
+<link rel="icon" href="/archive/static/icon.svg" type="image/svg+xml">
+<link rel="preload" href="/archive/assets/fonts/dotgothic16.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/archive/assets/fonts/zilla-slab-600.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/et-book-roman-lining.woff2" as="font" type="font/woff2" crossorigin>
+<style>@font-face{font-family:ET Book;src:url(/assets/fonts/et-book-roman-lining.woff2) format("woff2");font-display:swap}@font-face{font-family:ET Book;src:url(/assets/fonts/et-book-italic.woff2) format("woff2");font-style:italic;font-display:swap}@font-face{font-family:ET Book;src:url(/assets/fonts/et-book-bold.woff2) format("woff2");font-weight:700;font-display:swap}@font-face{font-family:DotGothic16;src:url(/archive/assets/fonts/dotgothic16.woff2) format("woff2");font-display:swap}@font-face{font-family:VT323;src:url(/archive/assets/fonts/vt323.woff2) format("woff2");font-display:swap}@font-face{font-family:Zilla Slab;src:url(/archive/assets/fonts/zilla-slab-600.woff2) format("woff2");font-weight:600;font-display:swap}@font-face{font-family:Cascadia Code;src:url(/assets/fonts/cascadia-code.woff2) format("woff2");font-display:swap}:root{--desk: #e7e0cf;--desk-ink: #1b1913;--desk-dot: #cfc6b0;--chrome: #1b1913;--hi: #fffaf0;--shadow: #1b1913;--ui: "DotGothic16", "VT323", ui-monospace, monospace;--term: "VT323", ui-monospace, monospace;--slab: "Zilla Slab", "Rockwell", Georgia, serif;--read: "ET Book", Palatino, "Palatino Linotype", Georgia, serif;--code: "Cascadia Code", ui-monospace, Consolas, monospace;--red: #c4311f;color-scheme:light}:root[data-theme=night]{--desk: #14100b;--desk-ink: #ece3cf;--desk-dot: #2a2117;--chrome: #ece3cf;--hi: #1d1710;--shadow: #3b2e1f;color-scheme:dark}.pal-paper{--paper: #f6f1e4;--ink: #1b1913;--soft: #6d6656;--tint: #ebe4d2}[data-theme=night] .pal-paper{--paper: #1a150f;--ink: #ece3cf;--soft: #a8977b;--tint: #251e15}*{box-sizing:border-box}html{-webkit-text-size-adjust:100%}body{margin:0;min-height:100vh;color:var(--desk-ink);font:16px/1.5 var(--ui);background-color:var(--desk);background-image:radial-gradient(var(--desk-dot) 1px,transparent 1.2px);background-size:6px 6px;padding-bottom:52px}a{color:inherit}button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}:focus-visible{outline:2px dashed currentColor;outline-offset:3px}.skip{position:absolute;left:-999px;top:0}.skip:focus{left:8px;z-index:100;background:var(--hi);padding:6px 10px}svg.px{display:block;fill:currentColor}svg.px{--f: var(--paper, var(--hi))}u{text-decoration-thickness:2px;text-underline-offset:4px}.marquee{position:sticky;top:0;z-index:30;height:28px;overflow:hidden;white-space:nowrap;background:var(--chrome);color:var(--desk);border-bottom:2px solid var(--chrome);font:19px/28px var(--term);letter-spacing:.14em}.marquee .track{display:inline-flex;animation:scroll 60s linear infinite}.marquee span{padding-right:2em}@keyframes scroll{to{transform:translate(-50%)}}.win{position:relative;background:var(--paper);color:var(--ink);border:2px solid var(--chrome);box-shadow:6px 6px 0 var(--shadow);display:flex;flex-direction:column;min-width:0;transition:box-shadow .15s}.win.dragging{box-shadow:12px 12px 0 var(--shadow);z-index:20;cursor:grabbing}.win.focused{z-index:10}.win .bar{display:flex;align-items:center;gap:8px;height:30px;padding:0 4px 0 6px;flex:none;color:var(--paper);-webkit-user-select:none;user-select:none;cursor:grab;touch-action:none;background:var(--ink) repeating-linear-gradient(0deg,var(--ink) 0 2px,color-mix(in srgb,var(--ink) 78%,var(--paper)) 2px 3px)}.win .bar .title{display:inline-flex;align-items:center;gap:6px;padding:1px 8px;background:var(--ink);font:15px/1 var(--ui);letter-spacing:.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}.win .bar .title svg{fill:var(--paper);flex:none}.win .bar .title svg{--f: var(--ink)}.win .ctl{margin-left:auto;display:flex;gap:3px;flex:none}.win .ctl button{width:22px;height:20px;display:grid;place-items:center;font:15px/1 var(--ui);background:var(--paper);color:var(--ink);border:1px solid var(--paper);box-shadow:inset -2px -2px color-mix(in srgb,var(--ink) 30%,var(--paper))}.win .ctl button:active{box-shadow:inset 2px 2px color-mix(in srgb,var(--ink) 30%,var(--paper))}.win .menu{display:flex;gap:18px;padding:4px 10px;border-bottom:2px solid var(--ink);font:14px/1.4 var(--ui);flex:none}.win .menu a,.win .menu button{text-decoration:none;cursor:pointer;padding:1px 6px;margin:0 -6px;font:inherit}.win .menu a:hover,.win .menu button:hover,.win .menu .on{background:var(--ink);color:var(--paper)}.win .menu u{text-decoration-thickness:1px;text-underline-offset:2px}.win .body{padding:16px;min-width:0;flex:1}.win .status{display:flex;gap:4px;padding:4px;border-top:2px solid var(--ink);font:13px/1.2 var(--ui);flex:none}.win .status span{flex:1;padding:3px 8px;border:1px solid color-mix(in srgb,var(--ink) 45%,var(--paper));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.win .status span:last-child{flex:0 1 auto}.win.min .menu,.win.min .body,.win.min .status,.win.closed{display:none}.win.maxed{position:fixed;inset:36px 12px 60px;z-index:40}.win.maxed .body{overflow:auto}.mask{width:100%;background:var(--ink);-webkit-mask:var(--src) center / 100% 100% no-repeat;mask:var(--src) center / 100% 100% no-repeat;image-rendering:pixelated}.caption{display:block;font:13px/1.2 var(--ui);color:var(--soft);margin-top:6px}.pill{display:inline-block;border:1.5px solid currentColor;border-radius:99px;padding:1px 9px 0;font:12px/1.5 var(--ui);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}.desktop{padding:22px clamp(12px,2.5vw,34px) 24px}.icons{display:flex;gap:6px;overflow-x:auto;padding:0 0 18px;scrollbar-width:none}.icons::-webkit-scrollbar{display:none}.ico{display:flex;flex-direction:column;align-items:center;gap:6px;width:92px;flex:none;padding:8px 4px;text-decoration:none;color:var(--desk-ink);font:13px/1.2 var(--ui);text-align:center}.ico svg{--f: var(--desk)}.ico span{padding:1px 4px}.ico:hover span,.ico:focus-visible span{background:var(--chrome);color:var(--desk)}.ico:hover svg{filter:drop-shadow(2px 2px 0 var(--desk-dot))}.wins{display:grid;gap:28px;align-items:start}.col{display:grid;gap:28px;align-content:start;min-width:0}@media (min-width: 1100px){.desktop{display:grid;grid-template-columns:96px minmax(0,1fr);gap:18px}.icons{flex-direction:column;overflow:visible;padding:0;position:sticky;top:18px;align-self:start}.home .wins{grid-template-columns:minmax(0,1fr) minmax(300px,380px)}.home .w-welcome{grid-column:1 / -1}.home .w-writing{grid-column:1}.home .side{grid-column:2}.side{position:sticky;top:18px;max-height:calc(100vh - 80px);overflow-y:auto;scrollbar-width:none;padding:0 10px 10px 0}.side::-webkit-scrollbar{display:none}.post .wins{grid-template-columns:minmax(0,760px) minmax(260px,340px);justify-content:center}.list .wins{max-width:980px}}.hello{display:grid;grid-template-columns:minmax(0,1fr) minmax(340px,560px);gap:clamp(24px,4vw,64px);align-items:center;padding:10px 8px 8px}.moonbox{background:var(--paper);color:var(--ink);padding:18px;border:2px solid var(--chrome)}.moonbox canvas{width:100%;aspect-ratio:1;display:block;image-rendering:pixelated;cursor:crosshair}.kick{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px}.hello h1{font:600 clamp(40px,5.2vw,98px)/.96 var(--slab);margin:0 0 18px;letter-spacing:-.03em;text-wrap:balance}.hello .lede{font:italic clamp(18px,1.5vw,22px)/1.45 var(--read);margin:0;max-width:40ch;color:var(--soft)}.blink-dot:before{content:"";display:inline-block;width:8px;height:8px;margin-right:8px;background:currentColor;animation:blink 1.1s steps(2) infinite}@keyframes blink{50%{opacity:0}}.w-room .body{padding:0;background:var(--paper)}.room{width:100%;display:block;image-rendering:pixelated;aspect-ratio:4 / 3}.ticker{margin:0;padding:8px 12px;border-top:2px solid var(--ink);font:18px/1.3 var(--term);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ticker span{font-family:var(--ui)}.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:18px}.card{position:relative;background:var(--paper);color:var(--ink);border:2px solid var(--ink);border-radius:0;padding:14px 16px 12px;display:flex;flex-direction:column;gap:10px;transition:transform .18s cubic-bezier(.3,1.4,.5,1),box-shadow .18s}.card:hover{transform:translate(-3px,-3px) rotate(-.4deg);box-shadow:6px 6px 0 var(--ink)}.card .cardlink{position:absolute;inset:0;z-index:2}.card .kicker{display:flex;flex-wrap:wrap;gap:5px;align-items:center}.card .no{margin-left:auto;font:18px/1 var(--term)}.card h3{font:600 22px/1.15 var(--slab);margin:2px 0 0;letter-spacing:-.005em;text-wrap:balance}.card .art{border-radius:0}.card .meta{font:12px/1.45 var(--ui);letter-spacing:.04em;margin:0;color:var(--ink)}.card .desc{font:16px/1.4 var(--read);margin:0;color:var(--soft);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.card .go{display:flex;justify-content:space-between;align-items:center;border-top:2px solid var(--ink);padding-top:8px;margin-top:auto;font:13px/1 var(--ui);letter-spacing:.08em}.card .arrow{font:22px/1 var(--term);transition:transform .2s}.card:hover .arrow{transform:translate(5px)}.card:hover .art{animation:jitter .24s steps(2) infinite}@keyframes jitter{50%{transform:translate(1px,-1px)}}.lasso{position:fixed;z-index:5;pointer-events:none;border:1px dashed var(--desk-ink);background:color-mix(in srgb,var(--desk-ink) 8%,transparent)}.ico.picked span{background:var(--chrome);color:var(--desk)}.card.picked{outline:2px dashed var(--ink);outline-offset:4px}.small{font:14px/1.4 var(--ui);margin:0 0 10px;color:var(--soft)}.rows{list-style:none;margin:0;padding:0}.rows li{border-bottom:1px dashed color-mix(in srgb,var(--ink) 50%,var(--paper));padding:9px 0}.rows li a{display:flex;justify-content:space-between;gap:12px;text-decoration:none}.rows .t{font:18px/1.3 var(--read)}.rows a:hover .t{text-decoration:underline;text-underline-offset:3px}.rows .d{font:13px/1.6 var(--ui);color:var(--soft);white-space:nowrap}.rows p{margin:4px 0 0;font:15px/1.4 var(--read);color:var(--soft)}.more{display:inline-block;margin-top:10px;font:14px/1 var(--ui)}.shelf{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:14px}.book{text-decoration:none;display:grid;gap:6px;font:13px/1.3 var(--ui)}.book .cover{border:2px solid var(--ink)}.book:hover .cover{transform:rotate(-2deg) translateY(-3px);transition:transform .2s}.binlist{border:2px inset var(--ink);background:#0d0a06;color:#c9b996;min-height:110px}[data-theme=night] .binlist{background:#0d0a06}.binlist .head{display:grid;grid-template-columns:1fr 1fr;margin:0;font:13px/1.6 var(--ui);background:var(--paper);color:var(--ink)}.binlist .head span{padding:0 6px;border-right:1px solid var(--ink)}.binlist .empty{padding:14px 10px;margin:0;font:16px/1.3 var(--term);color:#ece3cf}.w-reader .body{padding:0}.hero{background:var(--paper);color:var(--ink);padding:22px 22px 14px;border-bottom:2px solid var(--chrome)}.w-reader .head{padding:26px clamp(18px,5vw,56px) 8px}.w-reader h1{font:600 clamp(30px,4.6vw,48px)/1.06 var(--slab);margin:6px 0 16px;letter-spacing:-.015em;text-wrap:balance}.byline{display:flex;flex-wrap:wrap;gap:6px 18px;font:13px/1.4 var(--ui);letter-spacing:.06em;margin:0 0 18px;color:var(--soft)}.standfirst{font:italic 23px/1.45 var(--read);margin:0;padding:14px 0 6px;border-top:2px solid var(--ink)}.prose{padding:4px clamp(18px,5vw,56px) 10px;font:21px/1.62 var(--read);max-width:100%}.prose>*{max-width:68ch}.prose h2,.prose h3{font:600 28px/1.2 var(--slab);margin:1.8em 0 .5em;position:relative;scroll-margin-top:48px}.prose h3{font-size:22px}.prose h2:before{content:"\a7  ";color:var(--soft)}.prose .anchor{position:absolute;left:-1em;opacity:0;text-decoration:none;color:var(--soft)}.prose h2:hover .anchor,.prose h3:hover .anchor{opacity:1}.prose a{text-decoration-thickness:1px;text-underline-offset:3px}.prose img{max-width:100%;height:auto;display:block;margin:1.2em auto;border:2px solid var(--ink);background:#fff}.prose blockquote{margin:1.2em 0;padding:4px 18px;border-left:4px solid var(--ink);font-style:italic}.prose code{font:.8em/1.4 var(--code);background:var(--tint);padding:.1em .35em}.prose table{border-collapse:collapse;font:16px/1.4 var(--read);display:block;overflow-x:auto;max-width:100%}.prose th,.prose td{border:1px solid var(--ink);padding:5px 9px;text-align:left}.prose th{font:13px/1.4 var(--ui);background:var(--tint)}.prose hr{border:0;height:12px;background:radial-gradient(currentColor 1.4px,transparent 1.6px) 0 0 / 12px 12px repeat-x;margin:2em 0}.prose .code-caption{font:13px/1.3 var(--ui);color:var(--soft);margin:1.4em 0 -.6em}.prose li{margin:.25em 0}figure.code{margin:1.3em 0;max-width:none!important;border:2px solid var(--chrome);box-shadow:5px 5px 0 var(--shadow)}figure.code .bar{height:28px;cursor:default}figure.code .bar .title{font-family:var(--term);font-size:18px}figure.code .copy{margin-left:auto;font:13px/1 var(--ui);background:var(--paper);color:var(--ink);padding:3px 9px}figure.code pre{margin:0;padding:14px 16px;overflow-x:auto;font:14.5px/1.55 var(--code)}figure.code code{background:none;padding:0;font:inherit}.eof{text-align:center;font:15px/1 var(--ui);letter-spacing:.2em;margin:30px 0 10px;color:var(--soft)}.mask.end{max-width:220px;margin:0 auto 20px}.pager{display:grid;grid-template-columns:1fr 1fr;border-top:2px solid var(--ink)}.pager a{padding:14px 18px;text-decoration:none;font:18px/1.3 var(--read)}.pager a:hover{background:var(--ink);color:var(--paper)}.pager .next{text-align:right;border-left:2px solid var(--ink)}.pager small{display:block;font:12px/1.6 var(--ui);letter-spacing:.08em;color:inherit;opacity:.7}.w-toc ol{margin:0;padding-left:1.6em;font:15px/1.45 var(--read)}.w-toc li{padding:3px 0}.w-toc a{text-decoration:none}.w-toc a.here{background:var(--ink);color:var(--paper);padding:0 4px}.sheet{margin:0;font:14px/1.4 var(--ui)}.sheet div{display:grid;grid-template-columns:6.5em 1fr;gap:8px;padding:4px 0}.sheet dt{color:var(--soft)}.sheet dd{margin:0;overflow-wrap:anywhere}.papers{list-style:none;margin:0;padding:0}.paper{padding:14px 0;border-bottom:1px dashed color-mix(in srgb,var(--ink) 50%,var(--paper))}.paper .t{font:600 21px/1.25 var(--slab);text-decoration:none}.paper .t:hover{text-decoration:underline}.paper .by{font:13px/1.4 var(--ui);color:var(--soft);margin:4px 0 8px}.paper p{font:17px/1.5 var(--read);margin:0 0 8px}.paper .code{display:inline-flex;gap:6px;align-items:center;font:14px/1 var(--ui)}.bookrow{display:grid;grid-template-columns:minmax(0,220px) minmax(0,1fr);gap:24px}.bookrow h2{font:600 30px/1.1 var(--slab);margin:0 0 6px}.bookrow .sub{font:italic 19px/1.4 var(--read);margin:0 0 12px}.bookrow p{font:17px/1.5 var(--read)}.btn{display:inline-block;padding:6px 16px;margin-right:10px;text-decoration:none;font:15px/1.2 var(--ui);background:var(--paper);color:var(--ink);border:2px solid var(--ink);box-shadow:inset -2px -2px color-mix(in srgb,var(--ink) 35%,var(--paper)),3px 3px 0 var(--ink)}.btn:active{transform:translate(2px,2px);box-shadow:inset 2px 2px color-mix(in srgb,var(--ink) 35%,var(--paper))}.wins.center{justify-items:center;padding-top:8vh}.w-error{width:min(420px,100%)}.errbox{display:flex;gap:16px;align-items:center;font:16px/1.4 var(--ui)}.errbox .x{width:44px;height:44px;flex:none;display:grid;place-items:center;border-radius:50%;background:var(--red);color:#fff;font:34px/1 var(--term)}.btns{text-align:center;margin:18px 0 0}.taskbar{position:fixed;left:0;right:0;bottom:0;z-index:50;height:44px;display:flex;align-items:center;gap:6px;padding:4px 6px calc(4px + env(safe-area-inset-bottom));background:var(--hi);color:var(--desk-ink);border-top:2px solid var(--chrome)}.start,.task,.tray{height:34px;display:inline-flex;align-items:center;gap:7px;padding:0 10px;border:2px solid var(--chrome);box-shadow:inset -2px -2px 0 var(--desk-dot);font:14px/1 var(--ui);background:var(--hi)}.start b{font-weight:400;letter-spacing:.04em}.start[aria-expanded=true],.task.on{box-shadow:inset 2px 2px 0 var(--desk-dot);background:var(--desk)}.tasks{display:flex;gap:6px;overflow-x:auto;flex:1;scrollbar-width:none}.task{max-width:200px}.task span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tray{margin-left:auto;gap:12px;box-shadow:inset 2px 2px 0 var(--desk-dot)}.clock{font:20px/1 var(--term);min-width:5.6em;text-align:right}.tray-theme .moon,[data-theme=night] .tray-theme .sun{display:none}[data-theme=night] .tray-theme .moon{display:inline}.tray-music{display:inline-flex;align-items:center;gap:4px}.eq{display:none;gap:2px;align-items:flex-end;height:14px}.eq i{width:3px;background:currentColor;animation:eq .9s ease-in-out infinite}.eq i:nth-child(2){animation-delay:-.3s}.eq i:nth-child(3){animation-delay:-.6s}.eq i:nth-child(4){animation-delay:-.15s}.tray-music[aria-pressed=true] .eq{display:inline-flex}.tray-music[aria-pressed=true] .note{display:none}@keyframes eq{0%,to{height:3px}50%{height:14px}}.startmenu{position:fixed;left:6px;bottom:46px;z-index:60;display:flex;background:var(--hi);color:var(--desk-ink);border:2px solid var(--chrome);box-shadow:6px 6px 0 var(--shadow);min-width:250px}.startmenu[hidden]{display:none}.startmenu .side{writing-mode:vertical-rl;transform:rotate(180deg);background:var(--chrome);color:var(--desk);padding:10px 4px;font:22px/1 var(--term);letter-spacing:.2em}.startmenu ul{list-style:none;margin:0;padding:6px;flex:1}.startmenu a,.startmenu button{display:flex;align-items:center;gap:12px;width:100%;padding:7px 10px;text-decoration:none;font:15px/1 var(--ui)}.startmenu a:hover,.startmenu button:hover,.startmenu a:focus-visible,.startmenu button:focus-visible{background:var(--chrome);color:var(--desk)}.startmenu svg{--f: var(--hi)}.startmenu .sep{border-top:2px dashed var(--desk-dot);margin:6px 0}.trail{position:fixed;inset:0;pointer-events:none;z-index:70;width:100vw;height:100vh}.saver{position:fixed;inset:0;z-index:90;background:#000;cursor:none}.saver[hidden]{display:none}.saver canvas{width:100%;height:100%;display:block;image-rendering:pixelated}.saver p{position:absolute;bottom:18px;width:100%;text-align:center;margin:0;color:#6e604a;font:18px/1 var(--term);letter-spacing:.2em}.boot{position:fixed;inset:0;z-index:95;background:#0d0a06;color:#ece3cf;font:21px/1.35 var(--term);padding:6vh 6vw;transition:opacity .35s}.boot.done{opacity:0;pointer-events:none}.boot pre{margin:0;font:inherit;white-space:pre-wrap}.boot .cursor{animation:blink .8s steps(2) infinite}@media (max-width: 1099px){.icons{display:none}}@media (max-width: 720px){.hello,.facts{grid-template-columns:1fr}.facts div{min-height:0}.moonbox{max-width:240px}.bookrow{grid-template-columns:1fr}.bookrow .cover{max-width:220px}.prose{font-size:19px}.win{box-shadow:4px 4px 0 var(--shadow)}.tasks,.win .ctl .max{display:none}.clock{min-width:0}}@media (prefers-reduced-motion: reduce){*,*:before,*:after{animation:none!important;transition:none!important}.trail{display:none}}@media print{.marquee,.taskbar,.icons,.startmenu,.trail,.side,.w-room{display:none!important}.win{box-shadow:none;border:0}}.banner{position:relative;margin:-16px -16px 18px;border-bottom:2px solid var(--ink);background:#e9d9bb;overflow:hidden}.banner canvas{display:block;width:100%;aspect-ratio:21 / 8}.banner .sub{position:absolute;left:0;right:0;bottom:7%;text-align:center;padding:0 6%;font:600 clamp(15px,2.1vw,27px)/1.25 var(--slab);color:#fbf3df;letter-spacing:.01em;text-shadow:2px 0 #1b1913,-2px 0 #1b1913,0 2px #1b1913,0 -2px #1b1913,1.5px 1.5px #1b1913,-1.5px -1.5px #1b1913,1.5px -1.5px #1b1913,-1.5px 1.5px #1b1913}.banner .stamp{position:absolute;right:14px;top:10px;font:15px/1 var(--term);color:#1b1913;letter-spacing:.12em;opacity:.8}[data-theme=night] .banner .stamp{color:#ece3cf}.bin-ico .full-bin,.bin-ico.full .empty-bin{display:none}.bin-ico.full .full-bin{display:block}.bin-ico.gulp svg{animation:gulp .35s steps(3)}@keyframes gulp{40%{transform:scale(1.25) rotate(-6deg)}}.binitems{list-style:none;margin:0;padding:4px 0}.binitems li{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:4px 8px;font:15px/1.3 var(--term);color:#ece3cf}.binitems button{font:13px/1 var(--ui);background:#ece3cf;color:#14100b;padding:3px 8px}.binitems:not(:empty)+.empty{display:none}.binbtns{margin:10px 0 0}.flying{position:fixed;z-index:80;pointer-events:none;border:2px dashed var(--desk-ink);background:transparent}.binpop{position:fixed;z-index:45;width:min(420px,calc(100vw - 24px));left:50%;top:18vh;transform:translate(-50%)}.oops .big404{position:fixed;inset:0;display:grid;place-items:center;z-index:0;pointer-events:none;font:clamp(180px,34vw,520px)/1 var(--term);color:transparent;background:radial-gradient(var(--desk-ink) 1.6px,transparent 1.9px) 0 0 / 7px 7px;-webkit-background-clip:text;background-clip:text;opacity:.9}.oops .desktop{position:relative;z-index:1}.oops .w-error{width:min(560px,100%)}.oops .dump{font:17px/1.35 var(--term);background:#0d0a06;color:#ece3cf;padding:10px 12px;margin:14px 0 0;white-space:pre-wrap}.ghost{position:fixed;z-index:2;pointer-events:none}.ghost .bar{cursor:default}@media (max-width: 720px){.banner canvas{aspect-ratio:4 / 3}.banner .stamp{font-size:13px}}.book3d{--w: 92px;--h: 134px;--d: 22px;display:inline-block;perspective:900px;text-decoration:none;color:var(--ink);background:none;border:0;padding:0;cursor:pointer}.book3d.big{--w: 230px;--h: 330px;--d: 46px;perspective:1400px}.b3{position:relative;display:block;width:var(--w);height:var(--h);transform-style:preserve-3d;transition:transform .5s cubic-bezier(.3,1.25,.5,1)}.face{position:absolute;left:0;top:0;display:block;backface-visibility:hidden}.face.front{width:var(--w);height:var(--h);transform:translateZ(calc(var(--d) / 2));transform-style:preserve-3d}.face.back{width:var(--w);height:var(--h);transform:translateZ(calc(var(--d) / -2)) rotateY(180deg);background:var(--ink)}.face.spine{width:var(--d);height:var(--h);left:calc((var(--w) - var(--d)) / 2);transform:rotateY(-90deg) translateZ(calc(var(--w) / 2));background:var(--ink);color:var(--paper);display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:10px 0}.face.spine b{writing-mode:vertical-rl;transform:rotate(180deg);font:600 calc(var(--d) * .5)/1 var(--slab);letter-spacing:.02em;white-space:nowrap;overflow:hidden;max-height:80%}.face.spine i{font:calc(var(--d) * .38)/1 var(--term);font-style:normal}.face.edge{width:var(--d);height:calc(var(--h) - 6px);top:3px;left:calc((var(--w) - var(--d)) / 2);transform:rotateY(90deg) translateZ(calc(var(--w) / 2 - 3px));background:repeating-linear-gradient(90deg,var(--paper) 0 2px,color-mix(in srgb,var(--ink) 35%,var(--paper)) 2px 3px)}.face.top{width:calc(var(--w) - 3px);height:var(--d);top:calc((var(--h) - var(--d)) / 2);transform:rotateX(90deg) translateZ(calc(var(--h) / 2));background:repeating-linear-gradient(0deg,var(--paper) 0 2px,color-mix(in srgb,var(--ink) 35%,var(--paper)) 2px 3px)}.hinge{position:absolute;inset:0;display:block;transform-origin:left center;transform-style:preserve-3d;transition:transform .8s cubic-bezier(.4,1.1,.5,1)}.cover{position:absolute;inset:0;display:flex;flex-direction:column;gap:4%;padding:9% 9% 7%;background:var(--paper);border:2px solid var(--ink);backface-visibility:hidden;overflow:hidden}.cover:before{content:"";position:absolute;left:0;top:0;bottom:0;width:6%;background:var(--ink);opacity:.9}.cover .ck{font:calc(var(--w) * .052)/1 var(--term);letter-spacing:.14em;padding-left:4%}.cover .ct{font:600 calc(var(--w) * .12)/1.02 var(--slab);padding-left:4%;letter-spacing:-.01em}.cover .cs{font:italic calc(var(--w) * .052)/1.3 var(--read);padding-left:4%;color:var(--soft)}.cover .cart{margin-top:auto}.cover .cy{font:calc(var(--w) * .05)/1 var(--term);padding-left:4%;letter-spacing:.08em}.inner{position:absolute;inset:0;display:block;background:color-mix(in srgb,var(--ink) 10%,var(--paper));border:2px solid var(--ink);transform:rotateY(180deg);backface-visibility:hidden}.face.page{width:calc(var(--w) - 4px);height:calc(var(--h) - 6px);top:3px;transform:translateZ(calc(var(--d) / 2 - 2px));background:var(--paper);border:1px solid color-mix(in srgb,var(--ink) 40%,var(--paper))}.pg{display:flex;flex-direction:column;gap:10px;height:100%;padding:16px 16px 14px 20px;font:13.5px/1.45 var(--read);overflow:hidden}.pg .ck{font:12px/1 var(--term);letter-spacing:.14em;color:var(--soft)}.pg .pb{display:-webkit-box;-webkit-line-clamp:11;-webkit-box-orient:vertical;overflow:hidden}.pg .pl{margin-top:auto;font:12px/1.3 var(--ui)}.shelf3d{display:flex;gap:6px;align-items:flex-end;padding:22px 12px 0;border-bottom:10px solid var(--ink);position:relative;min-height:180px}.shelf3d:after{content:"";position:absolute;left:0;right:0;bottom:-18px;height:8px;background:repeating-linear-gradient(90deg,var(--ink) 0 2px,transparent 2px 6px);opacity:.5}.book3d.small .b3{transform:rotateY(72deg)}.book3d.small:hover .b3,.book3d.small:focus-visible .b3{transform:translate3d(14px,-16px,60px) rotateY(18deg) rotateX(4deg)}.book3d.small:hover{z-index:2;position:relative}.shelfnote{margin:22px 0 0}.stage{display:grid;justify-items:center;gap:14px;padding:10px 0}.book3d.big .b3{transform:rotateY(var(--ry, -24deg)) rotateX(var(--rx, 6deg))}.book3d.big.open .b3{transform:rotateY(-4deg) rotateX(4deg) translate(30%)}.book3d.big.open .hinge{transform:rotateY(-128deg)}.bookrow{grid-template-columns:minmax(0,380px) minmax(0,1fr);align-items:center}.stage{overflow:hidden;padding:10px 0 14px}@media (max-width: 720px){.book3d.big{--w: 190px;--h: 272px;--d: 38px}.book3d.big.open .b3{transform:rotateY(-4deg) translate(26%)}.stage{overflow:hidden}}.bookrow .links{display:flex;flex-wrap:wrap;gap:10px}.bookrow .links .btn{margin-right:0}@media (max-width: 720px){.bookrow{grid-template-columns:1fr}}.hello .acts{display:flex;flex-wrap:wrap;gap:12px;margin:24px 0 0}.hello .acts .btn{margin:0}.hello .acts .go{background:var(--ink);color:var(--paper);box-shadow:3px 3px color-mix(in srgb,var(--ink) 45%,var(--paper))}.sysprops{display:grid}.sysprops .tabs{display:flex;gap:2px;padding-left:6px}.sysprops .tab{font:13px/1 var(--ui);padding:7px 12px 6px;border:2px solid var(--ink);border-bottom:0;background:var(--tint);color:var(--soft);transform:translateY(2px)}.sysprops .tab.on{background:var(--paper);color:var(--ink);transform:none;padding-bottom:8px;position:relative;z-index:1}.sysprops .pane{border:2px solid var(--ink);background:var(--paper);padding:18px 18px 16px;box-shadow:5px 5px 0 var(--ink);display:grid;gap:14px}.sysid{display:flex;gap:16px;align-items:center;padding-bottom:14px;border-bottom:2px dashed color-mix(in srgb,var(--ink) 45%,var(--paper))}.sysid svg{flex:none}.sysid div{display:grid;gap:3px;font:14px/1.3 var(--ui);color:var(--soft)}.sysid b{font:600 26px/1 var(--slab);color:var(--ink);letter-spacing:.02em}.leaders{margin:0;display:grid;gap:9px}.leaders div{display:flex;align-items:baseline;gap:8px;font:15px/1.3 var(--ui)}.leaders dt{color:var(--soft);flex:none}.leaders div:before{content:"";order:1;flex:1;border-bottom:2px dotted color-mix(in srgb,var(--ink) 40%,var(--paper));min-width:16px;transform:translateY(-3px)}.leaders dd{margin:0;order:2;font:600 16px/1.25 var(--slab);text-align:right}.meter{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center;font:13px/1 var(--ui);color:var(--soft)}.meter i{height:16px;border:2px solid var(--ink);background:repeating-linear-gradient(-45deg,var(--ink) 0 4px,transparent 4px 8px) 0 0 / 11.3px 11.3px;animation:crawl .8s linear infinite}@keyframes crawl{to{background-position:11.3px 0}}.latest{margin:0;display:grid;gap:4px;padding:10px 12px;background:var(--tint);border:1px solid color-mix(in srgb,var(--ink) 35%,var(--paper))}.latest span{font:12px/1 var(--ui);letter-spacing:.12em;text-transform:uppercase;color:var(--soft)}.latest a{font:600 17px/1.25 var(--slab);text-decoration-thickness:1px;text-underline-offset:3px}@media (max-width: 980px){.hello{grid-template-columns:1fr}.sysprops{max-width:520px}}@media (max-width: 420px){.sysprops .tab:last-child{display:none}.leaders div{flex-wrap:wrap}.leaders div:before{display:none}.leaders dd{text-align:left}}.intro-pc{display:none}@media (min-width: 981px){.w-welcome .hello{display:none}.intro-pc{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,400px);gap:clamp(28px,4vw,64px);align-items:center;padding:18px clamp(8px,2vw,28px) 14px}.intro-pc .say{font:clamp(27px,2.2vw,34px)/1.42 var(--read);margin:0 0 26px;max-width:30ch;text-wrap:pretty}.rows-pc{margin:0;display:grid;gap:10px}.rows-pc div{display:grid;grid-template-columns:8.5em 1fr;gap:16px;font:20px/1.4 var(--read)}.rows-pc dt{color:var(--soft)}.rows-pc dd{margin:0}.rows-pc a{text-decoration-thickness:1px;text-underline-offset:4px}.heroart{width:100%;max-width:400px;justify-self:end}}@media (min-width: 981px){.banner canvas{aspect-ratio:auto;height:clamp(230px,22vw,340px)}}.facts{margin:22px 0 0;display:grid;gap:10px}.facts div{border:2px solid var(--ink);padding:10px 12px 12px;display:grid;gap:4px;background:var(--paper)}.facts dt{font:12px/1.2 var(--ui);letter-spacing:.12em;text-transform:uppercase;color:var(--soft)}.facts dd{margin:0;font:600 18px/1.25 var(--slab);overflow-wrap:anywhere}.facts dd a{text-decoration-thickness:1px;text-underline-offset:3px}.w-welcome .hello{grid-template-columns:1fr}@media (min-width: 981px){.intro-pc{grid-template-columns:minmax(0,34em) minmax(300px,500px);justify-content:center;gap:clamp(32px,5vw,96px)}.heroart{max-width:500px;justify-self:start}}.prose p,.prose li,.intro-pc .say,.hello .lede,.card .desc,.paper p,.bookrow p,.rows p,.pg .pb,.standfirst{text-align:justify;hyphens:auto;-webkit-hyphens:auto;hyphenate-limit-chars:6 3 3;text-wrap:wrap}@media (max-width: 380px){.card .desc,.rows p{text-align:left;-webkit-hyphens:manual;hyphens:manual}}.w-reader h1{font-size:clamp(26px,2.9vw,36px);line-height:1.12;letter-spacing:-.01em}.hello h1{font-size:clamp(28px,7.2vw,40px);line-height:1.06;letter-spacing:-.015em}.prose h2{font-size:24px}.card h3{font-size:20px}.intro-pc .say,.hello .lede{text-align:left;-webkit-hyphens:manual;hyphens:manual}.card{content-visibility:auto;contain-intrinsic-size:auto 520px}.prose>h2,.prose>p,.prose>figure,.prose>ul,.prose>ol,.prose>table{content-visibility:auto;contain-intrinsic-size:auto 120px}@media (max-width: 720px){body{padding-bottom:calc(66px + env(safe-area-inset-bottom))}.taskbar{height:auto;padding:7px 8px calc(7px + env(safe-area-inset-bottom));gap:8px}.taskbar .start{height:46px;padding:0 16px;gap:10px;font-size:16px}.taskbar .start svg{width:22px;height:22px}.taskbar .start b:after{content:" \25b4";font-size:11px;vertical-align:2px}.taskbar .tray{height:46px;padding:0;gap:0;box-shadow:none;border:0;background:none}.tray-music,.tray-theme{width:46px;height:46px;display:grid;place-items:center;border:2px solid var(--chrome);box-shadow:inset -2px -2px 0 var(--desk-dot);background:var(--hi);font-size:18px;margin-left:6px}.tray .clock{height:46px;display:grid;place-items:center;padding:0 12px;margin-left:6px;border:2px solid var(--chrome);box-shadow:inset 2px 2px 0 var(--desk-dot);font-size:21px;min-width:0}.startmenu{left:8px;right:8px;bottom:calc(68px + env(safe-area-inset-bottom));min-width:0}.startmenu a,.startmenu button{padding:13px 12px;font-size:17px}}@media (max-width: 360px){.tray .clock{display:none}}
+</style>
+<script>(function(){try{var t=localStorage.getItem('pawan-theme');if(t)document.documentElement.dataset.theme=t;else if(matchMedia('(prefers-color-scheme: dark)').matches)document.documentElement.dataset.theme='night';}catch(e){}})();</script>
+</head>
+<body class="post"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-writing" viewBox="0 0 16 13"><path d="M2 0h12v1h-12zM2 1h1v1h-1zM5 1h1v1h-1zM8 1h1v1h-1zM11 1h1v1h-1zM13 1h1v1h-1zM1 2h14v1h-14zM1 3h1v1h-1zM14 3h1v1h-1zM1 4h1v1h-1zM3 4h10v1h-10zM14 4h1v1h-1zM1 5h1v1h-1zM14 5h1v1h-1zM1 6h1v1h-1zM3 6h9v1h-9zM14 6h1v1h-1zM1 7h1v1h-1zM14 7h1v1h-1zM1 8h1v1h-1zM3 8h10v1h-10zM14 8h1v1h-1zM1 9h1v1h-1zM14 9h1v1h-1zM1 10h1v1h-1zM3 10h7v1h-7zM14 10h1v1h-1zM1 11h1v1h-1zM14 11h1v1h-1zM1 12h14v1h-14z" fill="currentColor"/><path d="M2 3h12v1h-12zM2 4h1v1h-1zM13 4h1v1h-1zM2 5h12v1h-12zM2 6h1v1h-1zM12 6h2v1h-2zM2 7h12v1h-12zM2 8h1v1h-1zM13 8h1v1h-1zM2 9h12v1h-12zM2 10h1v1h-1zM10 10h4v1h-4zM2 11h12v1h-12z" style="fill:var(--f)"/></symbol><symbol id="i-eye" viewBox="0 0 16 12"><path d="M1 0h10v1h-10zM1 1h1v1h-1zM10 1h2v1h-2zM1 2h1v1h-1zM10 2h1v1h-1zM12 2h1v1h-1zM1 3h1v1h-1zM10 3h4v1h-4zM1 4h1v1h-1zM5 4h4v1h-4zM13 4h1v1h-1zM1 5h1v1h-1zM4 5h1v1h-1zM9 5h1v1h-1zM13 5h1v1h-1zM1 6h1v1h-1zM3 6h1v1h-1zM6 6h2v1h-2zM10 6h1v1h-1zM13 6h1v1h-1zM1 7h1v1h-1zM3 7h1v1h-1zM6 7h2v1h-2zM10 7h1v1h-1zM13 7h1v1h-1zM1 8h1v1h-1zM4 8h1v1h-1zM9 8h1v1h-1zM13 8h1v1h-1zM1 9h1v1h-1zM5 9h4v1h-4zM13 9h1v1h-1zM1 10h1v1h-1zM13 10h1v1h-1zM1 11h13v1h-13z" fill="currentColor"/><path d="M2 1h8v1h-8zM2 2h8v1h-8zM2 3h8v1h-8zM2 4h3v1h-3zM9 4h4v1h-4zM2 5h2v1h-2zM10 5h3v1h-3zM2 6h1v1h-1zM11 6h2v1h-2zM2 7h1v1h-1zM11 7h2v1h-2zM2 8h2v1h-2zM10 8h3v1h-3zM2 9h3v1h-3zM9 9h4v1h-4zM2 10h11v1h-11z" style="fill:var(--f)"/></symbol><symbol id="i-papers" viewBox="0 0 16 14"><path d="M0 0h14v1h-14zM0 1h1v1h-1zM3 1h9v1h-9zM13 1h1v1h-1zM0 2h1v1h-1zM3 2h9v1h-9zM14 2h1v1h-1zM0 3h1v1h-1zM3 3h9v1h-9zM15 3h1v1h-1zM0 4h1v1h-1zM3 4h9v1h-9zM15 4h1v1h-1zM0 5h1v1h-1zM15 5h1v1h-1zM0 6h1v1h-1zM15 6h1v1h-1zM0 7h1v1h-1zM2 7h12v1h-12zM15 7h1v1h-1zM0 8h1v1h-1zM2 8h1v1h-1zM13 8h1v1h-1zM15 8h1v1h-1zM0 9h1v1h-1zM2 9h1v1h-1zM4 9h8v1h-8zM13 9h1v1h-1zM15 9h1v1h-1zM0 10h1v1h-1zM2 10h1v1h-1zM13 10h1v1h-1zM15 10h1v1h-1zM0 11h1v1h-1zM2 11h1v1h-1zM4 11h6v1h-6zM13 11h1v1h-1zM15 11h1v1h-1zM0 12h1v1h-1zM2 12h12v1h-12zM15 12h1v1h-1zM0 13h16v1h-16z" fill="currentColor"/><path d="M1 6h14v1h-14zM1 7h1v1h-1zM14 7h1v1h-1zM1 8h1v1h-1zM14 8h1v1h-1zM1 9h1v1h-1zM14 9h1v1h-1zM1 10h1v1h-1zM14 10h1v1h-1zM1 11h1v1h-1zM14 11h1v1h-1zM1 12h1v1h-1zM14 12h1v1h-1z" style="fill:var(--f)"/></symbol><symbol id="i-books" viewBox="0 0 16 13"><path d="M3 0h10v1h-10zM2 1h1v1h-1zM13 1h1v1h-1zM1 2h10v1h-10zM13 2h1v1h-1zM1 3h1v1h-1zM11 3h1v1h-1zM13 3h1v1h-1zM1 4h1v1h-1zM4 4h6v1h-6zM11 4h1v1h-1zM13 4h1v1h-1zM1 5h1v1h-1zM11 5h1v1h-1zM13 5h1v1h-1zM1 6h1v1h-1zM4 6h4v1h-4zM11 6h1v1h-1zM13 6h1v1h-1zM1 7h1v1h-1zM11 7h1v1h-1zM13 7h1v1h-1zM1 8h1v1h-1zM11 8h1v1h-1zM13 8h1v1h-1zM1 9h1v1h-1zM11 9h1v1h-1zM13 9h1v1h-1zM1 10h1v1h-1zM11 10h1v1h-1zM13 10h1v1h-1zM1 11h1v1h-1zM11 11h2v1h-2zM1 12h11v1h-11z" fill="currentColor"/><path d="M3 1h10v1h-10zM11 2h2v1h-2zM12 3h1v1h-1zM12 4h1v1h-1zM12 5h1v1h-1zM12 6h1v1h-1zM12 7h1v1h-1zM12 8h1v1h-1zM12 9h1v1h-1zM12 10h1v1h-1z" style="fill:var(--f)"/></symbol><symbol id="i-seams" viewBox="0 0 16 13"><path d="M1 0h14v1h-14zM1 1h1v1h-1zM14 1h1v1h-1zM1 2h1v1h-1zM3 2h10v1h-10zM14 2h1v1h-1zM1 3h1v1h-1zM3 3h1v1h-1zM12 3h1v1h-1zM14 3h1v1h-1zM1 4h1v1h-1zM3 4h1v1h-1zM6 4h1v1h-1zM9 4h1v1h-1zM12 4h1v1h-1zM14 4h1v1h-1zM1 5h1v1h-1zM3 5h1v1h-1zM12 5h1v1h-1zM14 5h1v1h-1zM1 6h1v1h-1zM3 6h1v1h-1zM6 6h4v1h-4zM12 6h1v1h-1zM14 6h1v1h-1zM1 7h1v1h-1zM3 7h1v1h-1zM12 7h1v1h-1zM14 7h1v1h-1zM1 8h1v1h-1zM3 8h10v1h-10zM14 8h1v1h-1zM1 9h1v1h-1zM14 9h1v1h-1zM1 10h14v1h-14zM6 11h4v1h-4zM4 12h8v1h-8z" fill="currentColor"/><path d="M4 3h8v1h-8zM4 4h2v1h-2zM7 4h2v1h-2zM10 4h2v1h-2zM4 5h8v1h-8zM4 6h2v1h-2zM10 6h2v1h-2zM4 7h8v1h-8z" style="fill:var(--f)"/></symbol><symbol id="i-web" viewBox="0 0 16 13"><path d="M5 0h6v1h-6zM3 1h2v1h-2zM7 1h1v1h-1zM11 1h2v1h-2zM2 2h1v1h-1zM6 2h1v1h-1zM8 2h1v1h-1zM13 2h1v1h-1zM1 3h5v1h-5zM9 3h6v1h-6zM1 4h1v1h-1zM5 4h1v1h-1zM9 4h1v1h-1zM14 4h1v1h-1zM0 5h1v1h-1zM6 5h1v1h-1zM8 5h1v1h-1zM15 5h1v1h-1zM0 6h16v1h-16zM0 7h1v1h-1zM6 7h1v1h-1zM8 7h1v1h-1zM15 7h1v1h-1zM1 8h1v1h-1zM5 8h1v1h-1zM9 8h1v1h-1zM14 8h1v1h-1zM1 9h5v1h-5zM9 9h6v1h-6zM2 10h1v1h-1zM6 10h1v1h-1zM8 10h1v1h-1zM13 10h1v1h-1zM3 11h2v1h-2zM7 11h1v1h-1zM11 11h2v1h-2zM5 12h6v1h-6z" fill="currentColor"/></symbol><symbol id="i-bin" viewBox="0 0 16 11"><path d="M4 0h8v1h-8zM1 1h14v1h-14zM2 2h12v1h-12zM2 3h1v1h-1zM5 3h1v1h-1zM8 3h1v1h-1zM11 3h1v1h-1zM13 3h1v1h-1zM2 4h1v1h-1zM5 4h1v1h-1zM8 4h1v1h-1zM11 4h1v1h-1zM13 4h1v1h-1zM2 5h1v1h-1zM5 5h1v1h-1zM8 5h1v1h-1zM11 5h1v1h-1zM13 5h1v1h-1zM2 6h1v1h-1zM5 6h1v1h-1zM8 6h1v1h-1zM11 6h1v1h-1zM13 6h1v1h-1zM2 7h1v1h-1zM5 7h1v1h-1zM8 7h1v1h-1zM11 7h1v1h-1zM13 7h1v1h-1zM2 8h1v1h-1zM5 8h1v1h-1zM8 8h1v1h-1zM11 8h1v1h-1zM13 8h1v1h-1zM2 9h1v1h-1zM5 9h1v1h-1zM8 9h1v1h-1zM11 9h1v1h-1zM13 9h1v1h-1zM2 10h12v1h-12z" fill="currentColor"/></symbol><symbol id="i-binFull" viewBox="0 0 16 11"><path d="M2 0h1v1h-1zM6 0h2v1h-2zM10 0h1v1h-1zM1 1h1v1h-1zM3 1h1v1h-1zM5 1h1v1h-1zM8 1h1v1h-1zM10 1h1v1h-1zM12 1h1v1h-1zM2 2h1v1h-1zM4 2h2v1h-2zM8 2h2v1h-2zM11 2h1v1h-1zM1 3h14v1h-14zM2 4h12v1h-12zM2 5h1v1h-1zM5 5h1v1h-1zM8 5h1v1h-1zM11 5h1v1h-1zM13 5h1v1h-1zM2 6h1v1h-1zM5 6h1v1h-1zM8 6h1v1h-1zM11 6h1v1h-1zM13 6h1v1h-1zM2 7h1v1h-1zM5 7h1v1h-1zM8 7h1v1h-1zM11 7h1v1h-1zM13 7h1v1h-1zM2 8h1v1h-1zM5 8h1v1h-1zM8 8h1v1h-1zM11 8h1v1h-1zM13 8h1v1h-1zM2 9h1v1h-1zM5 9h1v1h-1zM8 9h1v1h-1zM11 9h1v1h-1zM13 9h1v1h-1zM2 10h12v1h-12z" fill="currentColor"/><path d="M2 1h1v1h-1zM6 1h2v1h-2zM11 1h1v1h-1zM3 2h1v1h-1zM6 2h2v1h-2zM10 2h1v1h-1z" style="fill:var(--f)"/></symbol><symbol id="i-moon" viewBox="0 0 16 14"><path d="M5 0h6v1h-6zM3 1h2v1h-2zM11 1h2v1h-2zM2 2h1v1h-1zM13 2h1v1h-1zM1 3h1v1h-1zM14 3h1v1h-1zM1 4h1v1h-1zM14 4h1v1h-1zM0 5h1v1h-1zM15 5h1v1h-1zM0 6h1v1h-1zM15 6h1v1h-1zM0 7h1v1h-1zM15 7h1v1h-1zM0 8h1v1h-1zM15 8h1v1h-1zM1 9h1v1h-1zM14 9h1v1h-1zM1 10h1v1h-1zM14 10h1v1h-1zM2 11h1v1h-1zM13 11h1v1h-1zM3 12h2v1h-2zM11 12h2v1h-2zM5 13h6v1h-6z" fill="currentColor"/><path d="M5 1h6v1h-6zM3 2h9v1h-9zM2 3h10v1h-10zM2 4h9v1h-9zM1 5h10v1h-10zM1 6h9v1h-9zM1 7h9v1h-9zM1 8h10v1h-10zM2 9h9v1h-9zM2 10h10v1h-10zM3 11h9v1h-9zM5 12h6v1h-6z" style="fill:var(--f)"/></symbol><symbol id="i-terminal" viewBox="0 0 16 11"><path d="M0 0h16v1h-16zM0 1h1v1h-1zM15 1h1v1h-1zM0 2h16v1h-16zM0 3h1v1h-1zM15 3h1v1h-1zM0 4h1v1h-1zM2 4h2v1h-2zM15 4h1v1h-1zM0 5h1v1h-1zM3 5h2v1h-2zM15 5h1v1h-1zM0 6h1v1h-1zM4 6h2v1h-2zM15 6h1v1h-1zM0 7h1v1h-1zM3 7h2v1h-2zM15 7h1v1h-1zM0 8h1v1h-1zM2 8h2v1h-2zM6 8h5v1h-5zM15 8h1v1h-1zM0 9h1v1h-1zM15 9h1v1h-1zM0 10h16v1h-16z" fill="currentColor"/><path d="M1 1h14v1h-14z" style="fill:var(--f)"/></symbol></svg>
+<a class="skip" href="#main">skip to content</a>
+<main id="main" class="desktop"><nav class="icons" aria-label="desktop">
+<a class="ico" href="/archive/#writing"><svg class="px" width="48" height="39" shape-rendering="crispEdges" aria-hidden="true"><use href="#i-writing"/></svg><span>writing.txt</span></a>
+<a class="ico" href="/archive/papers/"><svg class="px" width="48" height="42" shape-rendering="crispEdges" aria-hidden="true"><use href="#i-papers"/></svg><span>papers.pdf</span></a>
+<a class="ico" href="/archive/books/"><svg class="px" width="48" height="39" shape-rendering="crispEdges" aria-hidden="true"><use href="#i-books"/></svg><span>books.lnk</span></a>
+<a class="ico" href="https://github.com/Cintu07/seams"><svg class="px" width="48" height="39" shape-rendering="crispEdges" aria-hidden="true"><use href="#i-seams"/></svg><span>seams.exe</span></a>
+<a class="ico" href="https://pawann.dev"><svg class="px" width="48" height="39" shape-rendering="crispEdges" aria-hidden="true"><use href="#i-web"/></svg><span>pawann.dev</span></a>
+<button class="ico bin-ico" type="button" data-action="bin"><span class="empty-bin"><svg class="px" width="48" height="33" shape-rendering="crispEdges" aria-hidden="true"><use href="#i-bin"/></svg></span><span class="full-bin"><svg class="px" width="48" height="33" shape-rendering="crispEdges" aria-hidden="true"><use href="#i-binFull"/></svg></span><span>recycle bin</span></button>
+</nav><div class="wins"><section class="win pal-paper w-reader" id="reader" data-title="pointers.md — Reader" aria-label="pointers.md — Reader">
+<header class="bar"><span class="title"><svg class="px" width="16" height="13" shape-rendering="crispEdges" aria-hidden="true"><use href="#i-writing"/></svg>pointers.md — Reader</span><span class="ctl"><button class="min" type="button" aria-label="minimise">_</button><button class="max" type="button" aria-label="maximise">□</button><button class="close" type="button" aria-label="close">×</button></span></header>
+<nav class="menu" aria-label="pointers.md — Reader menu"><a href="/archive/"><u>H</u>ome</a><a href="#main"><u>T</u>op</a><button type="button" data-menu="copy-link"><u>C</u>opy link</button><button type="button" data-menu="theme"><u>N</u>ight</button></nav><div class="body"><div class="hero pal-paper"><div class="mask art" style="--src:url(/archive/assets/art/pointers.png);aspect-ratio:400/250" role="img" aria-label="generated art for pointers before cuda: what they are, what changes between machines, and where cuda uses them"></div><span class="caption">fig. 0 — generated for this post, 1 bit</span></div>
+<header class="head">
+<p class="kick"><span class="pill">c</span><span class="pill">cuda</span></p>
+<h1>pointers before cuda: what they are, what changes between machines, and where cuda uses <u>them</u></h1>
+<p class="byline"><time datetime="2026-10-15">15 OCT 2026</time><span>16 MIN READ</span><span>3,709 WORDS</span></p>
+<p class="standfirst">what an address is, what changes between machines, and where cuda needs both.</p>
+</header>
+<article class="prose"><p>This post covers pointers in C, then the parts of C that change from one machine to another, then the three places CUDA code leans on both. Each idea gets a rule, a short program, and the output that program printed.</p>
+<p>Every C program here was compiled with gcc 13.3 (<code>-std=c17 -Wall -Wextra</code>) on x86-64 Linux and run. Output blocks are pasted unchanged. The CUDA snippets were not compiled, because the machine used for this post has no <code>nvcc</code>. They are marked where they appear.</p>
+<ol>
+<li><a href="#memory-is-numbered-bytes">memory is numbered bytes</a></li>
+<li><a href="#a-pointer-stores-an-address">a pointer stores an address</a></li>
+<li><a href="#reading-the-syntax">reading the syntax</a></li>
+<li><a href="#the-declaration-trap">the declaration trap</a></li>
+<li><a href="#functions-get-copies">functions get copies</a></li>
+<li><a href="#null">NULL</a></li>
+<li><a href="#sizeof-arithmetic-pointer-to-pointer">sizeof, arithmetic, pointer to pointer</a></li>
+<li><a href="#what-changes-between-machines">what changes between machines</a></li>
+<li><a href="#where-cuda-uses-all-this">where cuda uses all this</a></li>
+<li><a href="#cheat-sheet-and-exercises">cheat sheet and exercises</a></li>
+</ol>
+<h2 id="memory-is-numbered-bytes"><a class="anchor" href="#memory-is-numbered-bytes" aria-hidden="true">#</a>memory is numbered bytes</h2>
+<p>Memory is a long row of bytes. Every byte has a number, and that number is its <strong>address</strong>. Addresses go up by one per byte.</p>
+<p>A type decides two things: how many bytes a variable takes, and how those bytes are read. An <code>int</code> is usually 4 bytes, so it sits in 4 neighbouring addresses. The address of the variable is the address of its first byte. <code>sizeof</code> gives the byte count:</p>
+<p class="code-caption">snippet</p>
+<figure class="code win pal-night"><figcaption class="bar"><span class="title">C:\&gt; c</span><button class="copy" type="button" aria-label="copy code">copy</button></figcaption><pre><code class="hljs language-c"><span class="hljs-built_in">printf</span>(<span class="hljs-string">&quot;an int uses %zu bytes\n&quot;</span>, <span class="hljs-keyword">sizeof</span>(<span class="hljs-type">int</span>));   <span class="hljs-comment">// %zu is the format for size_t</span></code></pre></figure>
+<p>The number you see when you print an address is a <em>virtual</em> address. The operating system maps it to real RAM behind your back. The exact value changes between runs and between machines, so a program never depends on it. It only cares that two addresses are the same or different.</p>
+<h2 id="a-pointer-stores-an-address"><a class="anchor" href="#a-pointer-stores-an-address" aria-hidden="true">#</a>a pointer stores an address</h2>
+<p>A pointer is a variable whose value is an address. That is the whole definition. Two operators connect values and addresses:</p>
+<ul>
+<li><code>&amp;x</code> gives the address of <code>x</code>.</li>
+<li><code>*p</code> goes to the address stored in <code>p</code> and uses the thing there.</li>
+</ul>
+<p><img src="/assets/img/pointers/fig-1.webp" alt="Fig 1. p is an ordinary variable. Its value happens to be the address of x. (Addresses here are made up to keep the picture small.)" loading="lazy" decoding="async"></p>
+<p class="code-caption">table 1 · the five expressions you need, for <code>int x = 10; int *p = &amp;x;</code></p>
+<table>
+<thead>
+<tr>
+<th>expression</th>
+<th>what it is</th>
+<th>type</th>
+<th>value in fig 1</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>x</td>
+<td>the int itself</td>
+<td>int</td>
+<td>10</td>
+</tr>
+<tr>
+<td>&amp;x</td>
+<td>address of x</td>
+<td>int *</td>
+<td>1000</td>
+</tr>
+<tr>
+<td>p</td>
+<td>the address stored in p</td>
+<td>int *</td>
+<td>1000</td>
+</tr>
+<tr>
+<td>*p</td>
+<td>follow p, use the int there</td>
+<td>int</td>
+<td>10</td>
+</tr>
+<tr>
+<td>&amp;p</td>
+<td>address of p itself</td>
+<td>int **</td>
+<td>1008</td>
+</tr>
+</tbody></table>
+<p><code>*p</code> is not a copy of <code>x</code>. It <em>is</em> <code>x</code>, reached by a different route. Reading <code>*p</code> reads <code>x</code>, and writing <code>*p</code> writes <code>x</code>.</p>
+<p class="code-caption">basics.c, first part</p>
+<figure class="code win pal-night"><figcaption class="bar"><span class="title">C:\&gt; c</span><button class="copy" type="button" aria-label="copy code">copy</button></figcaption><pre><code class="hljs language-c"><span class="hljs-type">int</span> i = <span class="hljs-number">10</span>;
+<span class="hljs-type">int</span> *p = &amp;i;
+<span class="hljs-built_in">printf</span>(<span class="hljs-string">&quot;i = %d, *p = %d, p == &amp;i: %d\n&quot;</span>, i, *p, p == &amp;i);
+
+*p = <span class="hljs-number">20</span>;
+<span class="hljs-built_in">printf</span>(<span class="hljs-string">&quot;after *p = 20: i = %d\n&quot;</span>, i);
+i = <span class="hljs-number">30</span>;
+<span class="hljs-built_in">printf</span>(<span class="hljs-string">&quot;after i = 30:  *p = %d\n&quot;</span>, *p);</code></pre></figure>
+<p class="code-caption">output of basics.c, pasted unchanged</p>
+<figure class="code win pal-night"><figcaption class="bar"><span class="title">C:\&gt; text</span><button class="copy" type="button" aria-label="copy code">copy</button></figcaption><pre><code class="hljs language-text">i = 10, *p = 10, p == &amp;i: 1
+after *p = 20: i = 20
+after i = 30:  *p = 30</code></pre></figure>
+<p>Writing through <code>p</code> changed <code>i</code>, and writing <code>i</code> changed what <code>*p</code> reads. There is one int, with two ways to reach it.</p>
+<h2 id="reading-the-syntax"><a class="anchor" href="#reading-the-syntax" aria-hidden="true">#</a>reading the syntax</h2>
+<p>Most pointer confusion is grammar, so here is the grammar. A declaration is written the way the variable will be used:</p>
+<ul>
+<li><code>int *p;</code> reads as &quot;<code>*p</code> is an int&quot;, so <code>p</code> is a pointer to int.</li>
+<li><code>int a[10];</code> reads as &quot;<code>a[i]</code> is an int&quot;, so <code>a</code> is an array of ints.</li>
+</ul>
+<p>The same symbol does different jobs depending on where it sits:</p>
+<p class="code-caption">table 2 · one symbol, different jobs</p>
+<table>
+<thead>
+<tr>
+<th>symbol</th>
+<th>where</th>
+<th>meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>*</td>
+<td>in a declaration: int *p</td>
+<td>p is a pointer</td>
+</tr>
+<tr>
+<td>*</td>
+<td>before one expression: *p</td>
+<td>follow the address (dereference)</td>
+</tr>
+<tr>
+<td>*</td>
+<td>between two values: a * b</td>
+<td>multiply</td>
+</tr>
+<tr>
+<td>&amp;</td>
+<td>before one variable: &amp;x</td>
+<td>address of x</td>
+</tr>
+<tr>
+<td>&amp;</td>
+<td>between two values: a &amp; b</td>
+<td>bitwise AND</td>
+</tr>
+</tbody></table>
+<p>Both sides of an assignment need the same type. <code>p = &amp;x;</code> works because <code>&amp;x</code> has type <code>int *</code>, the same as <code>p</code>. <code>p = 20;</code> mixes an <code>int</code> into an <code>int *</code>, and the compiler complains.</p>
+<p>Also note what each form changes. <code>p = &amp;y;</code> changes where <code>p</code> points. <code>*p = 5;</code> changes the int that <code>p</code> points at.</p>
+<h2 id="the-declaration-trap"><a class="anchor" href="#the-declaration-trap" aria-hidden="true">#</a>the declaration trap</h2>
+<p>The <code>*</code> belongs to the variable name, not to the type. So this line declares one pointer and one plain int:</p>
+<p class="code-caption">snippet</p>
+<figure class="code win pal-night"><figcaption class="bar"><span class="title">C:\&gt; c</span><button class="copy" type="button" aria-label="copy code">copy</button></figcaption><pre><code class="hljs language-c"><span class="hljs-type">int</span> *a, b;     <span class="hljs-comment">// a is int *, b is int</span></code></pre></figure>
+<p>Writing <code>int* a, b;</code> means exactly the same thing, which is why that spelling misleads people. Here is a quiz: in <code>int *a, b, c, *d, e, *f, g, h, *i;</code> the pointers are <code>a</code>, <code>d</code>, <code>f</code> and <code>i</code>. The rest are ints. The program confirms the first case:</p>
+<p class="code-caption">output of basics.c, pasted unchanged</p>
+<figure class="code win pal-night"><figcaption class="bar"><span class="title">C:\&gt; text</span><button class="copy" type="button" aria-label="copy code">copy</button></figcaption><pre><code class="hljs language-text">int *a, b;  sizeof a = 8, sizeof b = 4</code></pre></figure>
+<p>When you declare pointers, one declaration per line avoids the mistake entirely.</p>
+<h2 id="functions-get-copies"><a class="anchor" href="#functions-get-copies" aria-hidden="true">#</a>functions get copies</h2>
+<p>C copies every argument into the function&#39;s parameter. A function that receives an <code>int</code> changes only its own copy. To let a function change the caller&#39;s variable, pass the variable&#39;s address. The function gets a copy of the address, and both copies lead to the same variable.</p>
+<p><img src="/assets/img/pointers/fig-2.webp" alt="Fig 2. Left: inc gets a copy of the value. Right: inc gets a copy of the address. Dereferencing that copy reaches the caller&#39;s x." loading="lazy" decoding="async"></p>
+<p class="code-caption">basics.c, functions</p>
+<figure class="code win pal-night"><figcaption class="bar"><span class="title">C:\&gt; c</span><button class="copy" type="button" aria-label="copy code">copy</button></figcaption><pre><code class="hljs language-c"><span class="hljs-type">static</span> <span class="hljs-type">void</span> <span class="hljs-title function_">inc</span><span class="hljs-params">(<span class="hljs-type">int</span> *p)</span> { *p += <span class="hljs-number">1</span>; }
+
+<span class="hljs-type">static</span> <span class="hljs-type">void</span> <span class="hljs-title function_">swap_broken</span><span class="hljs-params">(<span class="hljs-type">int</span> a, <span class="hljs-type">int</span> b)</span> { <span class="hljs-type">int</span> t = a; a = b; b = t; }
+<span class="hljs-type">static</span> <span class="hljs-type">void</span> <span class="hljs-title function_">swap_ok</span><span class="hljs-params">(<span class="hljs-type">int</span> *a, <span class="hljs-type">int</span> *b)</span>    { <span class="hljs-type">int</span> t = *a; *a = *b; *b = t; }
+
+<span class="hljs-comment">/* p is a COPY of the caller&#x27;s pointer, so this only changes the copy */</span>
+<span class="hljs-type">static</span> <span class="hljs-type">void</span> <span class="hljs-title function_">reassign</span><span class="hljs-params">(<span class="hljs-type">int</span> *p, <span class="hljs-type">int</span> *other)</span> { p = other; }</code></pre></figure>
+<p class="code-caption">output of basics.c, pasted unchanged</p>
+<figure class="code win pal-night"><figcaption class="bar"><span class="title">C:\&gt; text</span><button class="copy" type="button" aria-label="copy code">copy</button></figcaption><pre><code class="hljs language-text">after inc(&amp;i): i = 31
+swap_broken:   x = 1, y = 2
+swap_ok:       x = 2, y = 1
+after reassign: *r = 1 (r still points at m)</code></pre></figure>
+<p><code>swap_broken</code> swaps two copies and the caller sees nothing. <code>swap_ok</code> swaps the originals through their addresses.</p>
+<p><code>reassign</code> shows the second rule. The pointer itself is also a copy, so assigning to <code>p</code> inside the function does not move the caller&#39;s pointer. gcc even warns about it:</p>
+<p class="code-caption">compiler warning for reassign, pasted unchanged</p>
+<figure class="code win pal-night"><figcaption class="bar"><span class="title">C:\&gt; text</span><button class="copy" type="button" aria-label="copy code">copy</button></figcaption><pre><code class="hljs language-text">basics.c:10:27: warning: parameter &#x27;p&#x27; set but not used [-Wunused-but-set-parameter]
+   10 | static void reassign(int *p, int *other) { p = other; }</code></pre></figure>
+<p>The two rules together:</p>
+<ol>
+<li>To change the caller&#39;s <strong>thing</strong>, pass a pointer to it (<code>T *</code>).</li>
+<li>To change the caller&#39;s <strong>pointer</strong>, pass a pointer to the pointer (<code>T **</code>).</li>
+</ol>
+<p>Rule 2 is exactly how <code>cudaMalloc</code> works. It comes back in the CUDA section.</p>
+<h2 id="null"><a class="anchor" href="#null" aria-hidden="true">#</a>NULL</h2>
+<p>Any pointer can be set to <code>NULL</code>, which means &quot;points to nothing&quot;. Three rules cover it:</p>
+<ul>
+<li>A pointer you have not assigned holds garbage. Give it a real address or <code>NULL</code> right away.</li>
+<li>Dereferencing <code>NULL</code> is undefined behavior. It usually crashes, but the language does not promise that.</li>
+<li>Check before you use a pointer that might be <code>NULL</code>, and set a pointer to <code>NULL</code> after you free what it pointed at.</li>
+</ul>
+<p class="code-caption">basics.c</p>
+<figure class="code win pal-night"><figcaption class="bar"><span class="title">C:\&gt; c</span><button class="copy" type="button" aria-label="copy code">copy</button></figcaption><pre><code class="hljs language-c"><span class="hljs-type">int</span> *np = <span class="hljs-literal">NULL</span>;
+<span class="hljs-keyword">if</span> (np == <span class="hljs-literal">NULL</span>) <span class="hljs-built_in">printf</span>(<span class="hljs-string">&quot;np is NULL, so we do not dereference it\n&quot;</span>);</code></pre></figure>
+<p class="code-caption">output of basics.c, pasted unchanged</p>
+<figure class="code win pal-night"><figcaption class="bar"><span class="title">C:\&gt; text</span><button class="copy" type="button" aria-label="copy code">copy</button></figcaption><pre><code class="hljs language-text">np is NULL, so we do not dereference it</code></pre></figure>
+<h2 id="sizeof-arithmetic-pointer-to-pointer"><a class="anchor" href="#sizeof-arithmetic-pointer-to-pointer" aria-hidden="true">#</a>sizeof, arithmetic, pointer to pointer</h2>
+<p><strong>sizeof</strong> works on the type of an expression. For <code>int *p</code>, <code>sizeof p</code> is the size of a pointer and <code>sizeof *p</code> is the size of an int. The second form never actually dereferences <code>p</code>. It only asks for the type. Allocation code uses it so the size follows the pointer&#39;s type automatically: <code>malloc(n * sizeof *p)</code>.</p>
+<p class="code-caption">output of basics.c, pasted unchanged</p>
+<figure class="code win pal-night"><figcaption class="bar"><span class="title">C:\&gt; text</span><button class="copy" type="button" aria-label="copy code">copy</button></figcaption><pre><code class="hljs language-text">sizeof p = 8, sizeof *p = 4</code></pre></figure>
+<p><strong>Pointer arithmetic</strong> moves in units of the pointed-to type. <code>q + 1</code> is the address of the next <code>int</code>, which is 4 bytes later, not 1. This is how arrays work: <code>arr[2]</code> is defined as <code>*(arr + 2)</code>.</p>
+<p class="code-caption">basics.c</p>
+<figure class="code win pal-night"><figcaption class="bar"><span class="title">C:\&gt; c</span><button class="copy" type="button" aria-label="copy code">copy</button></figcaption><pre><code class="hljs language-c"><span class="hljs-type">int</span> arr[<span class="hljs-number">4</span>] = {<span class="hljs-number">10</span>, <span class="hljs-number">20</span>, <span class="hljs-number">30</span>, <span class="hljs-number">40</span>};
+<span class="hljs-type">int</span> *q = arr;
+<span class="hljs-built_in">printf</span>(<span class="hljs-string">&quot;arr[2] = %d, *(arr + 2) = %d, *(q + 2) = %d\n&quot;</span>, arr[<span class="hljs-number">2</span>], *(arr + <span class="hljs-number">2</span>), *(q + <span class="hljs-number">2</span>));
+<span class="hljs-built_in">printf</span>(<span class="hljs-string">&quot;q + 1 is %td bytes after q\n&quot;</span>, (<span class="hljs-type">char</span> *)(q + <span class="hljs-number">1</span>) - (<span class="hljs-type">char</span> *)q);</code></pre></figure>
+<p class="code-caption">output of basics.c, pasted unchanged</p>
+<figure class="code win pal-night"><figcaption class="bar"><span class="title">C:\&gt; text</span><button class="copy" type="button" aria-label="copy code">copy</button></figcaption><pre><code class="hljs language-text">arr[2] = 30, *(arr + 2) = 30, *(q + 2) = 30
+q + 1 is 4 bytes after q</code></pre></figure>
+<p><strong>Pointer to pointer</strong> follows from rule 2. <code>&amp;p</code> has type <code>int **</code>, and each <code>*</code> follows one level:</p>
+<p class="code-caption">basics.c</p>
+<figure class="code win pal-night"><figcaption class="bar"><span class="title">C:\&gt; c</span><button class="copy" type="button" aria-label="copy code">copy</button></figcaption><pre><code class="hljs language-c"><span class="hljs-type">int</span> **pp = &amp;p;
+**pp = <span class="hljs-number">99</span>;        <span class="hljs-comment">// pp -&gt; p -&gt; i, so this writes i</span>
+<span class="hljs-built_in">printf</span>(<span class="hljs-string">&quot;after **pp = 99: i = %d\n&quot;</span>, i);</code></pre></figure>
+<p class="code-caption">output of basics.c, pasted unchanged</p>
+<figure class="code win pal-night"><figcaption class="bar"><span class="title">C:\&gt; text</span><button class="copy" type="button" aria-label="copy code">copy</button></figcaption><pre><code class="hljs language-text">after **pp = 99: i = 99</code></pre></figure>
+<h2 id="what-changes-between-machines"><a class="anchor" href="#what-changes-between-machines" aria-hidden="true">#</a>what changes between machines</h2>
+<p>The C standard does not fix most sizes and layouts. It sets minimums and lets the compiler, CPU and operating system decide the rest. Code that works on your laptop can behave differently on another machine, and CUDA code always runs on at least two (CPU and GPU), so this matters here.</p>
+<p>This program prints what <em>this</em> machine chose:</p>
+<p class="code-caption">platform.c</p>
+<figure class="code win pal-night"><figcaption class="bar"><span class="title">C:\&gt; c</span><button class="copy" type="button" aria-label="copy code">copy</button></figcaption><pre><code class="hljs language-c"><span class="hljs-meta">#<span class="hljs-keyword">include</span> <span class="hljs-string">&lt;stdio.h&gt;</span></span>
+<span class="hljs-meta">#<span class="hljs-keyword">include</span> <span class="hljs-string">&lt;stddef.h&gt;</span></span>
+<span class="hljs-meta">#<span class="hljs-keyword">include</span> <span class="hljs-string">&lt;stdint.h&gt;</span></span>
+<span class="hljs-meta">#<span class="hljs-keyword">include</span> <span class="hljs-string">&lt;limits.h&gt;</span></span>
+
+<span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">bad</span>  {</span> <span class="hljs-type">char</span> a; <span class="hljs-type">int</span> b; <span class="hljs-type">char</span> c; };
+<span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">good</span> {</span> <span class="hljs-type">int</span> b; <span class="hljs-type">char</span> a; <span class="hljs-type">char</span> c; };
+
+<span class="hljs-meta">#<span class="hljs-keyword">define</span> SHOW(t) printf(<span class="hljs-string">&quot;  %-10s %zu\n&quot;</span>, #t, sizeof(t))</span>
+
+<span class="hljs-type">int</span> <span class="hljs-title function_">main</span><span class="hljs-params">(<span class="hljs-type">void</span>)</span> {
+    <span class="hljs-built_in">printf</span>(<span class="hljs-string">&quot;sizes in bytes\n&quot;</span>);
+    SHOW(<span class="hljs-type">char</span>);
+    SHOW(<span class="hljs-type">short</span>);
+    SHOW(<span class="hljs-type">int</span>);
+    SHOW(<span class="hljs-type">long</span>);
+    SHOW(<span class="hljs-type">long</span> <span class="hljs-type">long</span>);
+    SHOW(<span class="hljs-type">float</span>);
+    SHOW(<span class="hljs-type">double</span>);
+    SHOW(<span class="hljs-type">void</span> *);
+    SHOW(<span class="hljs-type">size_t</span>);
+
+    <span class="hljs-type">uint32_t</span> v = <span class="hljs-number">0x01020304</span>;
+    <span class="hljs-type">unsigned</span> <span class="hljs-type">char</span> *bytes = (<span class="hljs-type">unsigned</span> <span class="hljs-type">char</span> *)&amp;v;
+    <span class="hljs-built_in">printf</span>(<span class="hljs-string">&quot;\nbyte order\n&quot;</span>);
+    <span class="hljs-built_in">printf</span>(<span class="hljs-string">&quot;  0x01020304 in memory: %02x %02x %02x %02x\n&quot;</span>, bytes[<span class="hljs-number">0</span>], bytes[<span class="hljs-number">1</span>], bytes[<span class="hljs-number">2</span>], bytes[<span class="hljs-number">3</span>]);
+    <span class="hljs-built_in">printf</span>(<span class="hljs-string">&quot;  this machine is %s-endian\n&quot;</span>, bytes[<span class="hljs-number">0</span>] == <span class="hljs-number">0x04</span> ? <span class="hljs-string">&quot;little&quot;</span> : <span class="hljs-string">&quot;big&quot;</span>);
+
+    <span class="hljs-type">char</span> c = (<span class="hljs-type">char</span>)<span class="hljs-number">200</span>;
+    <span class="hljs-built_in">printf</span>(<span class="hljs-string">&quot;\nplain char\n&quot;</span>);
+    <span class="hljs-built_in">printf</span>(<span class="hljs-string">&quot;  %s (CHAR_MIN = %d)\n&quot;</span>, CHAR_MIN &lt; <span class="hljs-number">0</span> ? <span class="hljs-string">&quot;signed&quot;</span> : <span class="hljs-string">&quot;unsigned&quot;</span>, CHAR_MIN);
+    <span class="hljs-built_in">printf</span>(<span class="hljs-string">&quot;  (char)200 reads back as %d\n&quot;</span>, c);
+
+    <span class="hljs-built_in">printf</span>(<span class="hljs-string">&quot;\nstruct layout\n&quot;</span>);
+    <span class="hljs-built_in">printf</span>(<span class="hljs-string">&quot;  struct bad   size %2zu   a=%zu b=%zu c=%zu\n&quot;</span>, <span class="hljs-keyword">sizeof</span>(<span class="hljs-keyword">struct</span> bad),
+           offsetof(<span class="hljs-keyword">struct</span> bad, a), offsetof(<span class="hljs-keyword">struct</span> bad, b), offsetof(<span class="hljs-keyword">struct</span> bad, c));
+    <span class="hljs-built_in">printf</span>(<span class="hljs-string">&quot;  struct good  size %2zu   b=%zu a=%zu c=%zu\n&quot;</span>, <span class="hljs-keyword">sizeof</span>(<span class="hljs-keyword">struct</span> good),
+           offsetof(<span class="hljs-keyword">struct</span> good, b), offsetof(<span class="hljs-keyword">struct</span> good, a), offsetof(<span class="hljs-keyword">struct</span> good, c));
+    <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
+}</code></pre></figure>
+<p class="code-caption">output of platform.c, pasted unchanged</p>
+<figure class="code win pal-night"><figcaption class="bar"><span class="title">C:\&gt; text</span><button class="copy" type="button" aria-label="copy code">copy</button></figcaption><pre><code class="hljs language-text">sizes in bytes
+  char       1
+  short      2
+  int        4
+  long       8
+  long long  8
+  float      4
+  double     8
+  void *     8
+  size_t     8
+
+byte order
+  0x01020304 in memory: 04 03 02 01
+  this machine is little-endian
+
+plain char
+  signed (CHAR_MIN = -128)
+  (char)200 reads back as -56
+
+struct layout
+  struct bad   size 12   a=0 b=4 c=8
+  struct good  size  8   b=0 a=4 c=5</code></pre></figure>
+<h3 id="sizes"><a class="anchor" href="#sizes" aria-hidden="true">#</a>sizes</h3>
+<p class="code-caption">table 3 · type sizes: measured here vs what C promises</p>
+<table>
+<thead>
+<tr>
+<th>type</th>
+<th>bytes here</th>
+<th>what C guarantees</th>
+<th>seen elsewhere (not measured here)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>char</td>
+<td>1</td>
+<td>exactly 1 byte, by definition; at least 8 bits</td>
+<td>–</td>
+</tr>
+<tr>
+<td>short</td>
+<td>2</td>
+<td>at least 16 bits</td>
+<td>–</td>
+</tr>
+<tr>
+<td>int</td>
+<td>4</td>
+<td>at least 16 bits</td>
+<td>2 bytes on some small microcontrollers</td>
+</tr>
+<tr>
+<td>long</td>
+<td>8</td>
+<td>at least 32 bits</td>
+<td>4 bytes on 64-bit Windows</td>
+</tr>
+<tr>
+<td>long long</td>
+<td>8</td>
+<td>at least 64 bits</td>
+<td>–</td>
+</tr>
+<tr>
+<td>float / double</td>
+<td>4 / 8</td>
+<td>format not fixed by C</td>
+<td>IEEE 754 on almost every machine</td>
+</tr>
+<tr>
+<td>void *</td>
+<td>8</td>
+<td>size not fixed</td>
+<td>4 bytes on 32-bit systems</td>
+</tr>
+<tr>
+<td>size_t</td>
+<td>8</td>
+<td>unsigned; big enough for the largest object</td>
+<td>4 bytes on 32-bit systems</td>
+</tr>
+</tbody></table>
+<h3 id="byte-order"><a class="anchor" href="#byte-order" aria-hidden="true">#</a>byte order</h3>
+<p>A multi-byte value occupies consecutive addresses, but C does not say which end goes first. <strong>Little-endian</strong> machines store the least significant byte at the lowest address. <strong>Big-endian</strong> machines do the opposite. Network protocols use big-endian, and x86-64 CPUs are little-endian, as the output above shows.</p>
+<p><img src="/assets/img/pointers/fig-3.webp" alt="Fig 3. The same number, stored two ways. Code that reads a file or network packet byte by byte must know which one it is dealing with." loading="lazy" decoding="async"></p>
+<h3 id="signed-or-unsigned-char"><a class="anchor" href="#signed-or-unsigned-char" aria-hidden="true">#</a>signed or unsigned char</h3>
+<p>Plain <code>char</code> may be signed or unsigned, depending on the platform. Here it is signed, so <code>(char)200</code> reads back as -56. On other platforms it can be 200. Use <code>unsigned char</code> for raw bytes, and <code>int8_t</code> or <code>uint8_t</code> when you want a specific signedness.</p>
+<h3 id="struct-padding"><a class="anchor" href="#struct-padding" aria-hidden="true">#</a>struct padding</h3>
+<p>CPUs prefer values at addresses that are multiples of their size, so the compiler inserts unused <strong>padding</strong> bytes between struct fields. The same three fields take 12 bytes or 8 bytes depending only on their order:</p>
+<p><img src="/assets/img/pointers/fig-4.webp" alt="Fig 4. Offsets are the ones offsetof printed above. Putting the largest field first removes the gaps." loading="lazy" decoding="async"></p>
+<h3 id="three-kinds-of-quotthe-standard-does-not-sayquot"><a class="anchor" href="#three-kinds-of-quotthe-standard-does-not-sayquot" aria-hidden="true">#</a>three kinds of &quot;the standard does not say&quot;</h3>
+<p class="code-caption">table 4 · how much freedom the compiler has</p>
+<table>
+<thead>
+<tr>
+<th>kind</th>
+<th>meaning</th>
+<th>example</th>
+<th>can you rely on it?</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>implementation-defined</td>
+<td>compiler must pick one behavior and document it</td>
+<td>sizeof(int), plain char signedness</td>
+<td>only on that compiler and platform</td>
+</tr>
+<tr>
+<td>unspecified</td>
+<td>compiler picks one of several, need not say which</td>
+<td>order in which f(a(), b()) evaluates its arguments</td>
+<td>no</td>
+</tr>
+<tr>
+<td>undefined</td>
+<td>the standard puts no limit on what happens</td>
+<td>dereferencing NULL, signed overflow, reading past an array</td>
+<td>never; the bug may appear only under some optimization levels</td>
+</tr>
+</tbody></table>
+<h3 id="habits-that-keep-code-portable"><a class="anchor" href="#habits-that-keep-code-portable" aria-hidden="true">#</a>habits that keep code portable</h3>
+<ul>
+<li>Use <code>&lt;stdint.h&gt;</code> types (<code>int32_t</code>, <code>uint8_t</code>, <code>uint64_t</code>) whenever the exact size matters.</li>
+<li>Use <code>size_t</code> for sizes and counts, and print it with <code>%zu</code>.</li>
+<li>Write <code>sizeof</code> instead of 4 or 8. Prefer <code>sizeof *p</code> to <code>sizeof(int)</code>, so the size follows the type.</li>
+<li>Take limits from <code>&lt;limits.h&gt;</code> instead of guessing.</li>
+<li>Never rely on byte order. To read a 32-bit value from bytes, use shifts and masks, which behave the same everywhere.</li>
+<li>Use <code>unsigned char</code> for raw bytes.</li>
+<li>Compile with <code>-Wall -Wextra</code>, and test with <code>-fsanitize=address,undefined</code> to catch undefined behavior.</li>
+</ul>
+<h2 id="where-cuda-uses-all-this"><a class="anchor" href="#where-cuda-uses-all-this" aria-hidden="true">#</a>where cuda uses all this</h2>
+<p>A CUDA program has two processors with two separate memories: the CPU with system RAM (the <em>host</em>), and the GPU with its own memory (the <em>device</em>). Pointers are how your code names locations in each.</p>
+<p><img src="/assets/img/pointers/fig-5.webp" alt="Fig 5. Each pointer holds an address in its own memory. Data crosses between the two only through an explicit copy." loading="lazy" decoding="async"></p>
+<h3 id="1-a-device-pointer-is-only-valid-on-the-device"><a class="anchor" href="#1-a-device-pointer-is-only-valid-on-the-device" aria-hidden="true">#</a>1. a device pointer is only valid on the device</h3>
+<p><code>d_data</code> is a number like any other pointer. But it is an address inside GPU memory. Dereferencing it in ordinary CPU code reads the wrong place, so it crashes or returns garbage. (CUDA also has a separate feature called managed memory that both sides can use. Plain <code>cudaMalloc</code> memory is not that.) Name your pointers <code>h_</code> and <code>d_</code> so you never mix them up.</p>
+<h3 id="2-cudamalloc-takes-a-pointer-to-your-pointer"><a class="anchor" href="#2-cudamalloc-takes-a-pointer-to-your-pointer" aria-hidden="true">#</a>2. cudaMalloc takes a pointer to your pointer</h3>
+<p>The signature is <code>cudaMalloc(void **devPtr, size_t size)</code>. The function must write a new address <em>into your pointer variable</em>, so by rule 2 from the functions section, it needs that variable&#39;s address. This plain-C program has the same shape, using <code>malloc</code> so it can run anywhere:</p>
+<p class="code-caption">fakealloc.c</p>
+<figure class="code win pal-night"><figcaption class="bar"><span class="title">C:\&gt; c</span><button class="copy" type="button" aria-label="copy code">copy</button></figcaption><pre><code class="hljs language-c"><span class="hljs-meta">#<span class="hljs-keyword">include</span> <span class="hljs-string">&lt;stdio.h&gt;</span></span>
+<span class="hljs-meta">#<span class="hljs-keyword">include</span> <span class="hljs-string">&lt;stdlib.h&gt;</span></span>
+
+<span class="hljs-comment">/* same shape as cudaMalloc(void **devPtr, size_t size):
+   it writes a pointer INTO the caller&#x27;s pointer variable, so it needs that variable&#x27;s address */</span>
+<span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title function_">my_alloc</span><span class="hljs-params">(<span class="hljs-type">void</span> **out, <span class="hljs-type">size_t</span> bytes)</span> {
+    *out = <span class="hljs-built_in">malloc</span>(bytes);
+    <span class="hljs-keyword">return</span> *out == <span class="hljs-literal">NULL</span>;   <span class="hljs-comment">/* 0 means success */</span>
+}
+
+<span class="hljs-type">int</span> <span class="hljs-title function_">main</span><span class="hljs-params">(<span class="hljs-type">void</span>)</span> {
+    <span class="hljs-type">float</span> *buf = <span class="hljs-literal">NULL</span>;
+    <span class="hljs-type">size_t</span> n = <span class="hljs-number">4</span>;
+
+    <span class="hljs-keyword">if</span> (my_alloc((<span class="hljs-type">void</span> **)&amp;buf, n * <span class="hljs-keyword">sizeof</span> *buf) != <span class="hljs-number">0</span>) {
+        <span class="hljs-built_in">fprintf</span>(<span class="hljs-built_in">stderr</span>, <span class="hljs-string">&quot;alloc failed\n&quot;</span>);
+        <span class="hljs-keyword">return</span> <span class="hljs-number">1</span>;
+    }
+    <span class="hljs-built_in">printf</span>(<span class="hljs-string">&quot;buf is %s after my_alloc\n&quot;</span>, buf != <span class="hljs-literal">NULL</span> ? <span class="hljs-string">&quot;not NULL&quot;</span> : <span class="hljs-string">&quot;NULL&quot;</span>);
+
+    <span class="hljs-keyword">for</span> (<span class="hljs-type">size_t</span> i = <span class="hljs-number">0</span>; i &lt; n; i++) buf[i] = (<span class="hljs-type">float</span>)i * <span class="hljs-number">1.5f</span>;
+    <span class="hljs-keyword">for</span> (<span class="hljs-type">size_t</span> i = <span class="hljs-number">0</span>; i &lt; n; i++) <span class="hljs-built_in">printf</span>(<span class="hljs-string">&quot;buf[%zu] = %.1f\n&quot;</span>, i, buf[i]);
+
+    <span class="hljs-built_in">free</span>(buf);
+    buf = <span class="hljs-literal">NULL</span>;
+    <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
+}</code></pre></figure>
+<p class="code-caption">output of fakealloc.c, pasted unchanged</p>
+<figure class="code win pal-night"><figcaption class="bar"><span class="title">C:\&gt; text</span><button class="copy" type="button" aria-label="copy code">copy</button></figcaption><pre><code class="hljs language-text">buf is not NULL after my_alloc
+buf[0] = 0.0
+buf[1] = 1.5
+buf[2] = 3.0
+buf[3] = 4.5</code></pre></figure>
+<p><code>buf</code> started as <code>NULL</code> and ended up holding a real address, because <code>my_alloc</code> wrote through <code>&amp;buf</code>. Note <code>n * sizeof *buf</code>: the byte count is derived from the pointer&#39;s type, which is the habit from the platform section.</p>
+<h3 id="3-cudamemcpy-moves-bytes-so-you-supply-the-byte-count"><a class="anchor" href="#3-cudamemcpy-moves-bytes-so-you-supply-the-byte-count" aria-hidden="true">#</a>3. cudaMemcpy moves bytes, so you supply the byte count</h3>
+<p>The order is destination, source, byte count, direction. The count is the number of elements times <code>sizeof</code> one element. Getting the count wrong (for example forgetting to multiply by the element size) copies too little, and nothing warns you.</p>
+<h3 id="a-complete-example"><a class="anchor" href="#a-complete-example" aria-hidden="true">#</a>a complete example</h3>
+<p>This adds two arrays on the GPU. It was <strong>not compiled</strong> for this post (no <code>nvcc</code> available), but it uses only the calls described above. Read it and match each pointer to Fig 5.</p>
+<p class="code-caption">vecadd.cu · not compiled here</p>
+<figure class="code win pal-night"><figcaption class="bar"><span class="title">C:\&gt; c</span><button class="copy" type="button" aria-label="copy code">copy</button></figcaption><pre><code class="hljs language-c"><span class="hljs-meta">#<span class="hljs-keyword">include</span> <span class="hljs-string">&lt;stdio.h&gt;</span></span>
+<span class="hljs-meta">#<span class="hljs-keyword">include</span> <span class="hljs-string">&lt;stdlib.h&gt;</span></span>
+
+<span class="hljs-meta">#<span class="hljs-keyword">define</span> CHECK(call) do { cudaError_t e = (call); <span class="hljs-keyword">if</span> (e != cudaSuccess) { \
+    fprintf(stderr, <span class="hljs-string">&quot;%s:%d %s\n&quot;</span>, __FILE__, __LINE__, cudaGetErrorString(e)); exit(1); } } while (0)</span>
+
+__global__ <span class="hljs-type">void</span> <span class="hljs-title function_">add</span><span class="hljs-params">(<span class="hljs-type">const</span> <span class="hljs-type">float</span> *a, <span class="hljs-type">const</span> <span class="hljs-type">float</span> *b, <span class="hljs-type">float</span> *c, <span class="hljs-type">int</span> n)</span> {
+    <span class="hljs-type">int</span> i = blockIdx.x * blockDim.x + threadIdx.x;   <span class="hljs-comment">// which element this thread handles</span>
+    <span class="hljs-keyword">if</span> (i &lt; n) c[i] = a[i] + b[i];
+}
+
+<span class="hljs-type">int</span> <span class="hljs-title function_">main</span><span class="hljs-params">(<span class="hljs-type">void</span>)</span> {
+    <span class="hljs-type">const</span> <span class="hljs-type">int</span> n = <span class="hljs-number">1</span> &lt;&lt; <span class="hljs-number">20</span>;
+    <span class="hljs-type">const</span> <span class="hljs-type">size_t</span> bytes = n * <span class="hljs-keyword">sizeof</span>(<span class="hljs-type">float</span>);
+
+    <span class="hljs-type">float</span> *h_a = (<span class="hljs-type">float</span> *)<span class="hljs-built_in">malloc</span>(bytes);             <span class="hljs-comment">// host pointers</span>
+    <span class="hljs-type">float</span> *h_b = (<span class="hljs-type">float</span> *)<span class="hljs-built_in">malloc</span>(bytes);
+    <span class="hljs-type">float</span> *h_c = (<span class="hljs-type">float</span> *)<span class="hljs-built_in">malloc</span>(bytes);
+    <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> i = <span class="hljs-number">0</span>; i &lt; n; i++) { h_a[i] = <span class="hljs-number">1.0f</span>; h_b[i] = <span class="hljs-number">2.0f</span>; }
+
+    <span class="hljs-type">float</span> *d_a, *d_b, *d_c;                          <span class="hljs-comment">// device pointers</span>
+    CHECK(cudaMalloc((<span class="hljs-type">void</span> **)&amp;d_a, bytes));        <span class="hljs-comment">// address of the pointer, as in my_alloc</span>
+    CHECK(cudaMalloc((<span class="hljs-type">void</span> **)&amp;d_b, bytes));
+    CHECK(cudaMalloc((<span class="hljs-type">void</span> **)&amp;d_c, bytes));
+
+    CHECK(cudaMemcpy(d_a, h_a, bytes, cudaMemcpyHostToDevice));   <span class="hljs-comment">// dst, src, bytes, direction</span>
+    CHECK(cudaMemcpy(d_b, h_b, bytes, cudaMemcpyHostToDevice));
+
+    <span class="hljs-type">int</span> threads = <span class="hljs-number">256</span>;
+    <span class="hljs-type">int</span> blocks = (n + threads - <span class="hljs-number">1</span>) / threads;        <span class="hljs-comment">// round up so every element is covered</span>
+    add&lt;&lt;&lt;blocks, threads&gt;&gt;&gt;(d_a, d_b, d_c, n);
+    CHECK(cudaGetLastError());
+
+    CHECK(cudaMemcpy(h_c, d_c, bytes, cudaMemcpyDeviceToHost));
+    <span class="hljs-built_in">printf</span>(<span class="hljs-string">&quot;h_c[0] = %f\n&quot;</span>, h_c[<span class="hljs-number">0</span>]);                 <span class="hljs-comment">// expected 3.000000</span>
+
+    cudaFree(d_a); cudaFree(d_b); cudaFree(d_c);
+    <span class="hljs-built_in">free</span>(h_a); <span class="hljs-built_in">free</span>(h_b); <span class="hljs-built_in">free</span>(h_c);
+    <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
+}</code></pre></figure>
+<h3 id="4-host-and-device-must-agree-on-layouts"><a class="anchor" href="#4-host-and-device-must-agree-on-layouts" aria-hidden="true">#</a>4. host and device must agree on layouts</h3>
+<p>If you pass a struct or an array of structs between CPU and GPU, both sides must see the same field sizes, order and padding. Use fixed-width types (<code>int32_t</code>, <code>uint64_t</code>, <code>float</code>) in shared structs instead of <code>long</code> or plain <code>char</code>, and check with <code>sizeof</code> and <code>offsetof</code> as in <code>platform.c</code>.</p>
+<h3 id="5-check-every-return-value"><a class="anchor" href="#5-check-every-return-value" aria-hidden="true">#</a>5. check every return value</h3>
+<p>CUDA calls return an error code, and failures often show up later as wrong results. The <code>CHECK</code> macro above is the minimum. It is the same discipline as checking <code>malloc</code> for <code>NULL</code>.</p>
+<h2 id="cheat-sheet-and-exercises"><a class="anchor" href="#cheat-sheet-and-exercises" aria-hidden="true">#</a>cheat sheet and exercises</h2>
+<p class="code-caption">table 5 · the whole post in one table</p>
+<table>
+<thead>
+<tr>
+<th>you write</th>
+<th>it means</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>int *p;</td>
+<td>p is a pointer to int (uninitialized: set it before use)</td>
+</tr>
+<tr>
+<td>p = &amp;x;</td>
+<td>store the address of x in p</td>
+</tr>
+<tr>
+<td>*p = 5;</td>
+<td>write 5 into the int p points at</td>
+</tr>
+<tr>
+<td>p = NULL;</td>
+<td>p points to nothing; never dereference it</td>
+</tr>
+<tr>
+<td>f(&amp;x)</td>
+<td>let f change x</td>
+</tr>
+<tr>
+<td>f(&amp;p)</td>
+<td>let f change the pointer p (parameter type int **)</td>
+</tr>
+<tr>
+<td>p + 1</td>
+<td>the next element, sizeof *p bytes later</td>
+</tr>
+<tr>
+<td>sizeof *p</td>
+<td>size of one pointed-to element</td>
+</tr>
+<tr>
+<td>int *a, b;</td>
+<td>a is a pointer, b is an int</td>
+</tr>
+</tbody></table>
+<p>Predict the output on paper first, then run it.</p>
+<h3 id="exercise-1-two-pointers-one-variable"><a class="anchor" href="#exercise-1-two-pointers-one-variable" aria-hidden="true">#</a>Exercise 1: two pointers, one variable</h3>
+<p class="code-caption">ex.c</p>
+<figure class="code win pal-night"><figcaption class="bar"><span class="title">C:\&gt; c</span><button class="copy" type="button" aria-label="copy code">copy</button></figcaption><pre><code class="hljs language-c"><span class="hljs-type">int</span> a = <span class="hljs-number">1</span>, b = <span class="hljs-number">2</span>;
+<span class="hljs-type">int</span> *p = &amp;a;
+<span class="hljs-type">int</span> *q = p;
+*q = <span class="hljs-number">5</span>;
+p = &amp;b;
+*p = <span class="hljs-number">7</span>;
+<span class="hljs-built_in">printf</span>(<span class="hljs-string">&quot;a = %d, b = %d\n&quot;</span>, a, b);</code></pre></figure>
+<p>Answer: <code>a = 5, b = 7</code>. <code>q</code> got a copy of <code>p</code>&#39;s address, so <code>*q = 5</code> wrote into <code>a</code>. Then <code>p</code> moved to <code>b</code>, and <code>*p = 7</code> wrote into <code>b</code>. (Verified by running it.)</p>
+<h3 id="exercise-2-reassigning-a-parameter"><a class="anchor" href="#exercise-2-reassigning-a-parameter" aria-hidden="true">#</a>Exercise 2: reassigning a parameter</h3>
+<p class="code-caption">snippet</p>
+<figure class="code win pal-night"><figcaption class="bar"><span class="title">C:\&gt; c</span><button class="copy" type="button" aria-label="copy code">copy</button></figcaption><pre><code class="hljs language-c"><span class="hljs-type">void</span> <span class="hljs-title function_">f</span><span class="hljs-params">(<span class="hljs-type">int</span> *p)</span> { p = <span class="hljs-literal">NULL</span>; }
+<span class="hljs-comment">/* after f(ptr), is ptr NULL? */</span></code></pre></figure>
+<p>Answer: no. <code>p</code> is a copy of <code>ptr</code>. To change <code>ptr</code> you would pass <code>&amp;ptr</code> and take an <code>int **</code>.</p>
+<h3 id="exercise-3-sizes-on-your-machine"><a class="anchor" href="#exercise-3-sizes-on-your-machine" aria-hidden="true">#</a>Exercise 3: sizes on your machine</h3>
+<p>Print <code>sizeof(int *)</code> and <code>sizeof(int)</code>. This machine gave 8 and 4 (verified by running it). If your numbers differ, you have just seen platform dependence.</p>
+<hr>
+<p><strong>How this was checked.</strong> Compiled with gcc 13.3.0 on Ubuntu 24.04, x86-64, using <code>-std=c17 -Wall -Wextra</code>, at both <code>-O0</code> and <code>-O2</code>; all three programs printed identical output at both levels. <code>platform.c</code> was later reorganized and re-run on gcc 15.2.0, Ubuntu 26.04, x86-64, with the same flags and no compiler messages; it printed the same values as before. The only compiler message was the <code>reassign</code> warning shown above, which is intended. The CUDA example is not compiled. Platform notes in the &quot;seen elsewhere&quot; column of table 3 come from general knowledge of other platforms and were not measured here.</p>
+</article>
+<p class="eof">◆ end of file ◆</p>
+<div class="mask end" style="--src:url(/archive/assets/art/wings.png);aspect-ratio:735/103" aria-hidden="true"></div>
+<nav class="pager"><a class="prev" href="/archive/posts/the-interface-tax/"><small>◀ older</small>the inference tax</a><a class="next" href="/archive/posts/ciot-t2p-kernel/"><small>newer ▶</small>how i made a 27b ternary model 3.8x faster on a laptop cpu by reordering its bits</a></nav></div><footer class="status"><span>16 min read</span><span>3,709 words</span><span><span class="progress">0%</span></span></footer>
+</section><aside class="col side"><section class="win pal-paper w-toc" id="toc" data-title="contents" aria-label="contents">
+<header class="bar"><span class="title"><svg class="px" width="16" height="13" shape-rendering="crispEdges" aria-hidden="true"><use href="#i-writing"/></svg>contents</span><span class="ctl"><button class="min" type="button" aria-label="minimise">_</button><button class="max" type="button" aria-label="maximise">□</button><button class="close" type="button" aria-label="close">×</button></span></header>
+<div class="body"><ol><li><a href="#memory-is-numbered-bytes">memory is numbered bytes</a></li><li><a href="#a-pointer-stores-an-address">a pointer stores an address</a></li><li><a href="#reading-the-syntax">reading the syntax</a></li><li><a href="#the-declaration-trap">the declaration trap</a></li><li><a href="#functions-get-copies">functions get copies</a></li><li><a href="#null">NULL</a></li><li><a href="#sizeof-arithmetic-pointer-to-pointer">sizeof, arithmetic, pointer to pointer</a></li><li><a href="#what-changes-between-machines">what changes between machines</a></li><li><a href="#where-cuda-uses-all-this">where cuda uses all this</a></li><li><a href="#cheat-sheet-and-exercises">cheat sheet and exercises</a></li></ol></div>
+</section><section class="win pal-paper w-props" id="props" data-title="pointers.md properties" aria-label="pointers.md properties">
+<header class="bar"><span class="title"><svg class="px" width="16" height="12" shape-rendering="crispEdges" aria-hidden="true"><use href="#i-eye"/></svg>pointers.md properties</span><span class="ctl"><button class="min" type="button" aria-label="minimise">_</button><button class="max" type="button" aria-label="maximise">□</button><button class="close" type="button" aria-label="close">×</button></span></header>
+<div class="body"><dl class="sheet">
+<div><dt>Type</dt><dd>Markdown document</dd></div>
+<div><dt>Created</dt><dd>15 oct 2026</dd></div>
+<div><dt>Size</dt><dd>3,709 words</dd></div>
+<div><dt>Reading</dt><dd>16 min</dd></div>
+<div><dt>Tags</dt><dd>c, cuda</dd></div>
+<div><dt>Attributes</dt><dd>☑ read-only ☑ ran every program</dd></div>
+</dl></div>
+</section><section class="win pal-paper w-more" id="more" data-title="more writing" aria-label="more writing">
+<header class="bar"><span class="title"><svg class="px" width="16" height="13" shape-rendering="crispEdges" aria-hidden="true"><use href="#i-writing"/></svg>more writing</span><span class="ctl"><button class="min" type="button" aria-label="minimise">_</button><button class="max" type="button" aria-label="maximise">□</button><button class="close" type="button" aria-label="close">×</button></span></header>
+<div class="body"><ul class="rows"><li><a href="/archive/posts/a630-emulator/"><span class="t">running an adreno 630 in numpy</span><span class="d">01 nov 2026</span></a></li><li><a href="/archive/posts/batch-invariance/"><span class="t">why speculative decoding changed my output</span><span class="d">26 oct 2026</span></a></li><li><a href="/archive/posts/ciot-t2p-kernel/"><span class="t">how i made a 27b ternary model 3.8x faster on a laptop cpu by reordering its bits</span><span class="d">17 oct 2026</span></a></li><li><a href="/archive/posts/the-interface-tax/"><span class="t">the inference tax</span><span class="d">04 oct 2026</span></a></li><li><a href="/archive/posts/gradient-descent/"><span class="t">gradient descent is one line of code. here is everything that line hides.</span><span class="d">03 oct 2026</span></a></li><li><a href="/archive/posts/your-ai-has-amnesia/"><span class="t">your ai has amnesia, and a bigger context window will not fix it</span><span class="d">10 aug 2026</span></a></li></ul></div>
+</section></aside></div></main>
+<nav class="taskbar" aria-label="taskbar">
+<button class="start" type="button" aria-haspopup="menu" aria-expanded="false"><svg class="px" width="16" height="14" shape-rendering="crispEdges" aria-hidden="true"><use href="#i-moon"/></svg><b>pawan</b></button>
+<div class="tasks"><button class="task" type="button" data-win="reader"><svg class="px" width="16" height="13" shape-rendering="crispEdges" aria-hidden="true"><use href="#i-writing"/></svg><span>pointers.md</span></button></div>
+<div class="tray">
+<button class="tray-music" type="button" aria-pressed="false" aria-label="play music" title="gladiator now we are free super theme song"><span class="note">♫</span><span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span></button>
+<button class="tray-theme" type="button" aria-label="switch day and night"><span class="sun">☼</span><span class="moon">☾</span></button>
+<time class="clock" aria-label="time">--:--</time>
+</div>
+</nav>
+<div class="startmenu" role="menu" hidden>
+<div class="side"><span>PAWAN.SYS</span></div>
+<ul>
+<li><a role="menuitem" href="/archive/"><svg class="px" width="32" height="26" shape-rendering="crispEdges" aria-hidden="true"><use href="#i-writing"/></svg><span>writing</span></a></li>
+<li><a role="menuitem" href="/archive/papers/"><svg class="px" width="32" height="28" shape-rendering="crispEdges" aria-hidden="true"><use href="#i-papers"/></svg><span>papers</span></a></li>
+<li><a role="menuitem" href="/archive/books/"><svg class="px" width="32" height="26" shape-rendering="crispEdges" aria-hidden="true"><use href="#i-books"/></svg><span>books</span></a></li>
+<li><a role="menuitem" href="https://pawann.dev"><svg class="px" width="32" height="26" shape-rendering="crispEdges" aria-hidden="true"><use href="#i-web"/></svg><span>pawann.dev</span></a></li>
+<li><a role="menuitem" href="https://github.com/Cintu07"><svg class="px" width="32" height="22" shape-rendering="crispEdges" aria-hidden="true"><use href="#i-terminal"/></svg><span>github</span></a></li>
+<li><a role="menuitem" href="/feed.xml"><svg class="px" width="32" height="24" shape-rendering="crispEdges" aria-hidden="true"><use href="#i-eye"/></svg><span>feed</span></a></li>
+<li class="sep"></li>
+<li><button role="menuitem" type="button" data-action="theme"><svg class="px" width="32" height="28" shape-rendering="crispEdges" aria-hidden="true"><use href="#i-moon"/></svg><span>day / night</span></button></li>
+<li><button role="menuitem" type="button" data-action="saver"><svg class="px" width="32" height="26" shape-rendering="crispEdges" aria-hidden="true"><use href="#i-seams"/></svg><span>screensaver</span></button></li>
+</ul>
+</div>
+<audio id="music" src="/assets/music/gladiator-now-we-are-free-super-theme-song.mp3" preload="none" loop></audio>
+<canvas class="trail" aria-hidden="true"></canvas>
+<div class="saver" hidden><canvas></canvas><p>move the mouse to come back</p></div>
+<script type="speculationrules">{"prerender":[{"where":{"and":[{"href_matches":"/archive/*"},{"not":{"href_matches":"/archive/assets/*"}}]},"eagerness":"moderate"}]}</script>
+<script type="module" src="/archive/static/os.js"></script>
+</body>
+</html>

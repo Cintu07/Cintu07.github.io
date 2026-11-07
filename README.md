@@ -1,35 +1,34 @@
-# pawan.sys
+# pawan
 
-my blog as a 1-bit desktop. same posts as before, same urls (`/posts/<slug>/`), new everything else.
+my blog, at https://cintu07.github.io. long posts, the papers i implement, and books when there is one.
 
 ## writing a post
 
-same as the old site: drop a markdown file in `content/posts/` with front matter (`title`, `date`,
-`description`, `tags`, optional `cover`). a leading `>` quote becomes the standfirst.
-`{: .code-caption }` under a line still makes it a caption.
-
-every post gets its own generated picture: a small 3d scene in `build/art.mjs`, rendered by a
-raymarcher and dithered to 1 bit. a post without its own scene gets a moon. add a scene keyed by
-the post's slug to give it one.
-
-## building
+drop a markdown file in `content/posts/`:
 
 ```
-npm install
-node build/build.mjs      # writes dist/
-node build/serve.mjs      # http://localhost:4321/
+---
+title: the title
+date: 2026-10-03
+description: one line for the list and the link preview
+tags: go, systems
+cover: /assets/img/optional-cover.jpg
+---
 ```
 
-link-preview images live in `assets/og/` and are committed. after adding a post, with the server
-running: `node build/og.mjs` (needs edge or chrome), then build again.
+a leading `>` quote becomes the standfirst under the title. without one, the description is used. put images in `assets/img/` and link them as `/assets/img/name.png`.
 
-## how it looks the way it does
+## papers and books
 
-- every image is a 1-bit mask; css paints it with the window's ink, so one file works on cream paper
-  by day and black glass at night (`build/dither.mjs`: atkinson, floyd-steinberg, bayer, halftone)
-- windows take one paper/ink pair: paper, lilac, night, moss, clay, blueprint (`static/site.css`)
-- the moon, the room, the screensaver and the cursor trail are drawn pixel by pixel with no
-  smoothing (`static/live.js`)
-- with scripts off it is a plain readable document
+`content/papers.json` and `content/books.json`. a book has `title`, `blurb`, and optionally `status`, `year`, `url`, `linkText`. the books page and its nav link appear once the list is not empty.
 
-fonts: et book (mit), cascadia code (ofl), vt323, dotgothic16, zilla slab, silkscreen (ofl).
+## building and deploying
+
+```
+pip install -r requirements.txt
+python build.py
+```
+
+that writes the site to `dist/`. pushing to `main` runs `.github/workflows/pages.yml`, which does the same build and deploys it, so only the sources live in git. a new file in `content/posts/` is a new post a minute after the push.
+
+set in [et book](https://github.com/edwardtufte/et-book), mit licensed. no javascript on the site.

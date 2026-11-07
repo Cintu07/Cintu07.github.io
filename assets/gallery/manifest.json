@@ -1,0 +1,258 @@
+{
+ "weather-nine-ways": {
+  "w": 736,
+  "h": 736,
+  "sw": 640,
+  "sh": 640,
+  "moving": false,
+  "big": "weather-nine-ways.webp"
+ },
+ "flight": {
+  "w": 735,
+  "h": 903,
+  "sw": 521,
+  "sh": 640,
+  "moving": false,
+  "big": "flight.webp"
+ },
+ "boring-office": {
+  "w": 735,
+  "h": 1110,
+  "sw": 424,
+  "sh": 640,
+  "moving": false,
+  "big": "boring-office.webp"
+ },
+ "the-tv": {
+  "w": 736,
+  "h": 736,
+  "sw": 640,
+  "sh": 640,
+  "moving": false,
+  "big": "the-tv.webp"
+ },
+ "swallows-on-the-wire": {
+  "w": 736,
+  "h": 600,
+  "sw": 640,
+  "sh": 522,
+  "moving": false,
+  "big": "swallows-on-the-wire.webp"
+ },
+ "saturn-and-an-eclipse": {
+  "w": 466,
+  "h": 750,
+  "sw": 398,
+  "sh": 640,
+  "moving": false,
+  "big": "saturn-and-an-eclipse.webp"
+ },
+ "lily": {
+  "w": 736,
+  "h": 982,
+  "sw": 480,
+  "sh": 640,
+  "moving": false,
+  "big": "lily.webp"
+ },
+ "a-shoal": {
+  "w": 736,
+  "h": 981,
+  "sw": 480,
+  "sh": 640,
+  "moving": false,
+  "big": "a-shoal.webp"
+ },
+ "dusk-over-the-city": {
+  "w": 736,
+  "h": 736,
+  "sw": 640,
+  "sh": 640,
+  "moving": false,
+  "big": "dusk-over-the-city.webp"
+ },
+ "moon-in-the-blossoms": {
+  "w": 736,
+  "h": 736,
+  "sw": 640,
+  "sh": 640,
+  "moving": false,
+  "big": "moon-in-the-blossoms.webp"
+ },
+ "moon-over-the-roof": {
+  "w": 736,
+  "h": 708,
+  "sw": 640,
+  "sh": 616,
+  "moving": false,
+  "big": "moon-over-the-roof.webp"
+ },
+ "the-arch": {
+  "w": 900,
+  "h": 648,
+  "sw": 640,
+  "sh": 461,
+  "moving": true,
+  "big": "the-arch.webp"
+ },
+ "selene": {
+  "w": 600,
+  "h": 338,
+  "sw": 600,
+  "sh": 338,
+  "moving": true,
+  "big": "selene.webp"
+ },
+ "a-bench-under-the-clouds": {
+  "w": 736,
+  "h": 415,
+  "sw": 640,
+  "sh": 361,
+  "moving": false,
+  "big": "a-bench-under-the-clouds.webp"
+ },
+ "chase-in-the-snow": {
+  "w": 736,
+  "h": 588,
+  "sw": 640,
+  "sh": 511,
+  "moving": false,
+  "big": "chase-in-the-snow.webp"
+ },
+ "hills-dithered": {
+  "w": 735,
+  "h": 500,
+  "sw": 640,
+  "sh": 435,
+  "moving": false,
+  "big": "hills-dithered.webp"
+ },
+ "lily-pads": {
+  "w": 736,
+  "h": 368,
+  "sw": 640,
+  "sh": 320,
+  "moving": false,
+  "big": "lily-pads.webp"
+ },
+ "ice-cream-shop": {
+  "w": 735,
+  "h": 588,
+  "sw": 640,
+  "sh": 512,
+  "moving": false,
+  "big": "ice-cream-shop.webp"
+ },
+ "iced-coffee": {
+  "w": 736,
+  "h": 736,
+  "sw": 640,
+  "sh": 640,
+  "moving": false,
+  "big": "iced-coffee.webp"
+ },
+ "a-record-in-the-grass": {
+  "w": 735,
+  "h": 704,
+  "sw": 640,
+  "sh": 613,
+  "moving": false,
+  "big": "a-record-in-the-grass.webp"
+ },
+ "rain-over-the-city": {
+  "w": 900,
+  "h": 868,
+  "sw": 640,
+  "sh": 617,
+  "moving": true,
+  "big": "rain-over-the-city.webp"
+ },
+ "make-a-wish": {
+  "w": 328,
+  "h": 328,
+  "sw": 328,
+  "sh": 328,
+  "moving": true,
+  "big": "make-a-wish.webp"
+ },
+ "try-new-things": {
+  "w": 736,
+  "h": 736,
+  "sw": 640,
+  "sh": 640,
+  "moving": false,
+  "big": "try-new-things.webp"
+ },
+ "winter-nights": {
+  "w": 600,
+  "h": 600,
+  "sw": 600,
+  "sh": 600,
+  "moving": true,
+  "big": "winter-nights.gif"
+ },
+ "lanterns": {
+  "w": 600,
+  "h": 600,
+  "sw": 600,
+  "sh": 600,
+  "moving": true,
+  "big": "lanterns.gif"
+ },
+ "autumn": {
+  "w": 600,
+  "h": 600,
+  "sw": 600,
+  "sh": 600,
+  "moving": true,
+  "big": "autumn.gif"
+ },
+ "kyoto-forest": {
+  "w": 736,
+  "h": 920,
+  "sw": 512,
+  "sh": 640,
+  "moving": false,
+  "big": "kyoto-forest.webp"
+ },
+ "star-field": {
+  "w": 736,
+  "h": 981,
+  "sw": 480,
+  "sh": 640,
+  "moving": false,
+  "big": "star-field.webp"
+ },
+ "the-flow": {
+  "w": 736,
+  "h": 1104,
+  "sw": 427,
+  "sh": 640,
+  "moving": false,
+  "big": "the-flow.webp"
+ },
+ "side-step": {
+  "w": 736,
+  "h": 1104,
+  "sw": 427,
+  "sh": 640,
+  "moving": false,
+  "big": "side-step.webp"
+ },
+ "fuji": {
+  "w": 736,
+  "h": 736,
+  "sw": 640,
+  "sh": 640,
+  "moving": false,
+  "big": "fuji.webp"
+ },
+ "the-gramophone": {
+  "w": 540,
+  "h": 301,
+  "sw": 540,
+  "sh": 301,
+  "moving": true,
+  "big": "the-gramophone.webp"
+ }
+}
