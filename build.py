@@ -118,14 +118,13 @@ NAV_JS = r"""(function () {
   ["mouseover", "touchstart", "focusin"].forEach(function (n) { document.addEventListener(n, warm, { passive: true }); });
 
   var conn = window.navigator && window.navigator.connection;
-  if (!(conn && conn.saveData)) {
-    (window.requestIdleCallback || function (f) { setTimeout(f, 1500); })(function () {
+  function later(f) { (window.requestIdleCallback || function (g) { setTimeout(g, 1500); })(f, { timeout: 4000 }); }
+  if (!(conn && conn.saveData)) addEventListener("load", function () { setTimeout(function () { later(function () {
       document.querySelectorAll("header a, .links-line a").forEach(function (a) {
         var u = target(a);
         if (u && u.pathname + u.search !== current) load(u).catch(function () {});
       });
-    });
-  }
+    }); }, 1200); }, { once: true });
 })();"""
 
 SITE_OG = "/assets/share/site.jpg"
@@ -219,7 +218,11 @@ def svg_size(src):
 def figure(m):
     alt, src = m.group(1), m.group(2)
     caption = f"<figcaption>{alt}</figcaption>" if alt.strip() else ""
-    return f'<figure><img src="{src}" alt="{alt}"{svg_size(src)} loading="lazy" decoding="async">{caption}</figure>'
+    img = f'<img src="{src}" alt="{alt}"{svg_size(src)} loading="lazy" decoding="async">'
+    webp = re.sub(r"\.(png|jpe?g)$", ".webp", src)
+    if webp != src and (ROOT / webp.lstrip("/")).exists():
+        img = f'<picture><source type="image/webp" srcset="{webp}">{img}</picture>'
+    return f'<figure>{img}{caption}</figure>'
 
 
 def render(body):
@@ -393,7 +396,8 @@ function boot() {
 }
 // a page the browser prerendered on hover has not been opened yet: wait, so the song is not
 // restarted from a stale position the moment it is opened
-if (document.prerendering) document.addEventListener("prerenderingchange", boot, { once: true }); else boot();
+function soon() { if (document.readyState === "complete") setTimeout(boot, 600); else addEventListener("load", function () { setTimeout(boot, 600); }, { once: true }); }
+if (document.prerendering) document.addEventListener("prerenderingchange", soon, { once: true }); else soon();
 })();"""
 
 
@@ -541,7 +545,6 @@ SHEET_JS = r"""(function () {
     var home = document.querySelector("main.home"), first = false;
     try { first = !sessionStorage.getItem("pawan-typed"); sessionStorage.setItem("pawan-typed", "1"); } catch (e) {}
     if (home && first && !still) {
-      home.classList.add("struck");
       var words = home.querySelector(".lede .words");
       if (words) {
         var text = words.textContent, i = 0;
@@ -549,16 +552,21 @@ SHEET_JS = r"""(function () {
         (function type() { i += 2; words.textContent = text.slice(0, i); if (i < text.length) setTimeout(type, 15); })();
       }
     }
-    var seal = document.querySelector(".hanko");
-    if (seal && !still && "IntersectionObserver" in window) {
-      var io = new IntersectionObserver(function (seen) {
-        if (seen[0].isIntersecting) { seal.classList.add("pressed"); io.disconnect(); }
-      }, { threshold: 0.6 });
-      io.observe(seal);
-    }
   }
-  boot();
-  document.addEventListener("sheet:swap", boot);
+  function books() {
+    if (still || !matchMedia("(hover: none)").matches || !("IntersectionObserver" in window)) return;
+    var io = new IntersectionObserver(function (seen) {
+      seen.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        io.unobserve(e.target);
+        e.target.classList.add("open");
+        setTimeout(function () { e.target.classList.remove("open"); }, 2600);
+      });
+    }, { threshold: 0.8 });
+    document.querySelectorAll(".tome").forEach(function (t) { io.observe(t); });
+  }
+  boot(); books();
+  document.addEventListener("sheet:swap", function () { boot(); books(); });
 })();"""
 
 
@@ -574,6 +582,31 @@ def art(name, eager=False):
     classes = f'art {name}' + (" ink" if a["ink"] else "")
     loading = ' fetchpriority="high"' if eager else ' loading="lazy"'
     return f'<img class="{classes}" src="/assets/art/{name}.webp" width="{a["w"]}" height="{a["h"]}" alt=""{loading} decoding="async">'
+
+
+def minify_css(css):
+    """comments out, whitespace collapsed, no space around { } ; , : where css never needs it"""
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    css = re.sub(r"\s+", " ", css)
+    css = re.sub(r"\s*([{};,])\s*", r"\1", css)
+    css = re.sub(r";}", "}", css)
+    return css.strip()
+
+
+SITE_CSS = None
+
+
+def site_css():
+    global SITE_CSS
+    if SITE_CSS is None:
+        SITE_CSS = minify_css((ROOT / "assets" / "site.css").read_text(encoding="utf-8"))
+    return SITE_CSS
+
+
+def minify_js(js):
+    """only what is safe without a parser: comment lines and leading indentation"""
+    lines = [line.strip() for line in js.splitlines()]
+    return "\n".join(line for line in lines if line and not line.startswith("//"))
 
 
 def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=None, chrome=True, share_title=None, folio="1 / 1"):
@@ -615,7 +648,6 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
 </dl>
 <p class="yours">yours,<b>pawan kalyan</b></p>
 </div>
-<div class="hanko" lang="ja" aria-hidden="true">{JA[0]}</div>
 </div>
 <p class="closing"><span>old memory of new time ....</span><span>{folio}</span></p>
 </footer>
@@ -628,13 +660,12 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
 <meta name="color-scheme" content="light dark">
 <meta name="darkreader-lock">
 <meta name="theme-color" id="theme-color" content="#cdc5b3">
-<script>{THEME_JS}</script>
+<script>{minify_js(THEME_JS)}</script>
 <title>{esc(full_title.lower())}</title>
 <meta name="description" content="{esc(description)}">
 <link rel="canonical" href="{canonical}">
 <link rel="alternate" type="application/rss+xml" title="{NAME}" href="/feed.xml">
 <link rel="icon" href="/assets/img/icon.png">
-<link rel="preload" href="/assets/fonts/cmuntt.woff2" as="font" type="font/woff2" crossorigin>
 <meta property="og:site_name" content="{NAME}">
 <meta property="og:type" content="{"article" if article else "website"}">
 <meta property="og:title" content="{esc((share_title or (title if article else NAME)).lower())}">
@@ -643,12 +674,12 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
 <meta property="og:image" content="{og}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="{og}">
-<link rel="stylesheet" href="/assets/site.css">
+<style>{site_css()}</style>
 <script type="application/ld+json">{json.dumps(ld)}</script>
 </head>
 <body{' class="has-music"' if music else ''}>
 {header_html}{body}
-{footer_html}{music}<script>{COPY_JS}</script><script>{NAV_JS}</script><script>{SHEET_JS}</script>
+{footer_html}{music}<script>{minify_js(COPY_JS + NAV_JS + SHEET_JS)}</script>
 </body>
 </html>
 """
@@ -770,18 +801,35 @@ def prepare_book(b):
     return b
 
 
+def tome(b, big=False):
+    """a book you can open: cover, spine, page edges and a back, in 3d. hovering (or, on a touch
+    screen, scrolling it into view) swings the cover open and flips three pages to the title page"""
+    if not b.get("cover"):
+        return ""
+    src = b["cover"]
+    webp = re.sub(r"\.(png|jpe?g)$", ".webp", src)
+    if webp != src and (ROOT / webp.lstrip("/")).exists():
+        src = webp
+    href = b["pdf"] if big else b.get("url", b["pdf"])
+    pages = f'{b["pages"]} pages' if b.get("pages") else ""
+    return f"""<a class="tome{" big" if big else ""}" href="{href}"{" download" if big else ""} aria-label="{"download" if big else "open"} {esc(b["title"])}">
+<span class="tome-body" aria-hidden="true">
+<span class="tome-back"></span><span class="tome-edge"></span><span class="tome-spine"><i>{esc(b["title"])}</i></span>
+<span class="tome-leaf"><b>{esc(b["title"])}</b><em>pawan kalyan</em><small>{pages}</small></span>
+<span class="tome-page p3"></span><span class="tome-page p2"></span><span class="tome-page p1"></span>
+<span class="tome-cover"><img src="{src}" alt="" loading="lazy" decoding="async"><span class="inside"></span></span>
+</span>
+</a>"""
+
+
 def book_card(b, big=False, heading="h3"):
     meta = " · ".join(x for x in (b.get("year", ""), f'{b["pages"]} pages' if b.get("pages") else "", "free pdf") if x)
-    # the cover's size is known when it is made from the pdf, so the page keeps its room while it loads
-    size = f' width="{b["cover_size"][0]}" height="{b["cover_size"][1]}"' if b.get("cover_size") else ""
-    wide = f'<source media="(max-width: 720px)" srcset="{b["cover_wide"][0]}" width="{b["cover_wide"][1]}" height="{b["cover_wide"][2]}">' if b.get("cover_wide") else ""
-    cover = f'<a href="{b["pdf"]}" download class="cover-link"><picture>{wide}<img class="cover" src="{b["cover"]}" alt="cover of {esc(b["title"])}"{size} loading="lazy" decoding="async"></picture></a>' if b.get("cover") else ""
     code = f'<a class="code-link" href="{b["code"]}" download>source code <span>{size_of(b["code"])}</span></a>' if b.get("code") else ""
     blurb = f'<p class="note">{esc(b["blurb"])}</p>' if big and b.get("blurb") else ""
     subtitle = f'<p class="subtitle">{esc(b["subtitle"])}</p>' if b.get("subtitle") else ""
     title = f'<a href="{b["url"]}">{esc(b["title"])}</a>' if b.get("url") and heading != "h1" else esc(b["title"])
     return f"""<div class="book{" big" if big else ""}">
-{cover}
+{tome(b, big)}
 <div>
 <{heading}>{title}</{heading}>
 {subtitle}
@@ -940,7 +988,7 @@ def home(posts, entries):
     pics = gallery()
     strip_html = ""
     if pics:
-        cells = "".join(f'<li><a href="/gallery/" title="{esc(g["title"])}"><img src="/assets/gallery/{g["name"]}-s.webp" alt="{esc(g["title"])}" loading="lazy" decoding="async"></a></li>' for g in pics[:6])
+        cells = "".join(f'<li><a href="/gallery/" title="{esc(g["title"])}"><img src="/assets/gallery/{g["name"]}-t.webp" width="240" height="240" alt="{esc(g["title"])}" loading="lazy" decoding="async"></a></li>' for g in pics[:6])
         strip_html = f"""<section id="gallery">
 <h2 class="label"><a href="/gallery/">pinned to the sheet</a> <span>{len(pics)} in the gallery</span></h2>
 <ul class="strip">{cells}</ul>
@@ -950,7 +998,7 @@ def home(posts, entries):
         [f'<a href="{href}" rel="me noreferrer">{label}</a>' for label, href in SOCIALS if not href.startswith("mailto:")]
         + [f'<a href="{GITHUB}" rel="me noreferrer">github</a>', '<a href="https://pawann.dev">pawann.dev</a>'])
     body = f"""<main class="home">
-<h1 class="title">pawan kalyan<span class="ja" lang="ja">{JA}</span><span class="stamp-mark" aria-hidden="true">on file<small>since {since}</small></span></h1>
+<h1 class="title">pawan kalyan<span class="ja" lang="ja">{JA}</span></h1>
 <p class="lede"><span class="words">i'm pawan. i build database and inference stuff and break it a lot. this is where i write down why.</span><span class="caret" aria-hidden="true"></span></p>
 <dl class="facts">
 <dt>good at</dt><dd>{GOOD_AT}</dd>

@@ -54,6 +54,10 @@ def main():
             still.save(OUT / f"{name}.webp", quality=84, method=6)
         small = fit(still, SMALL)
         small.save(OUT / f"{name}-s.webp", quality=80, method=6)
+        # a square 240px crop for the strip on the home page
+        sq = min(small.size)
+        thumb = small.convert("RGB").crop(((small.width - sq) // 2, (small.height - sq) // 2, (small.width + sq) // 2, (small.height + sq) // 2))
+        thumb.resize((240, 240), Image.LANCZOS).save(OUT / f"{name}-t.webp", quality=78, method=6)
         big = OUT / f"{name}.gif" if (OUT / f"{name}.gif").exists() else OUT / f"{name}.webp"
         manifest[name] = {"w": still.width, "h": still.height, "sw": small.width, "sh": small.height, "moving": moving, "big": big.name}
         print(f"{name:28} {still.width}x{still.height} {'moving' if moving else ''} {big.name} {big.stat().st_size // 1024} KB")
