@@ -5,147 +5,105 @@ description: on writing a line diff in nasm, porting it to webassembly by hand, 
 tags: assembly, simd, webassembly, webgl, performance
 cover: /assets/img/seams-cover.png
 ---
-i benchmarked the best javascript diff viewer i could find on a pair of files with a million lines each. it took six seconds to show anything and forty-one seconds to finish highlighting. git diff gets through the same two files in a fraction of that, so almost all of the time was going into drawing.
+i benchmarked the best javascript diff viewer i could find on two files with a million lines each. it took six seconds to show anything and forty-one seconds to finish highlighting. git diff gets through the same pair in a fraction of that, so almost all of the time was going into the browser drawing the result.
 
-seams is my go at the browser side of that. the diff engine is written in x86-64 assembly, then again by hand in webassembly so it can run in a browser, and the viewer draws with webgl. on my laptop the same pair of files opens in about 0.19 seconds and scrolls at the refresh rate of the screen.
+seams is what i wrote to fix my side of that. the diff engine is x86-64 assembly. the same engine is written a second time, by hand, in webassembly so it can run in a browser. the viewer draws every character with webgl. on my laptop that million-line pair now opens in 0.19 seconds, the colours are done in half a second, and it scrolls at the full 145 hz of the screen. the javascript library managed about 48 frames a second.
 
-## what a diff actually is
 
-a line diff answers one question: what's the smallest set of lines i can delete from the old file and insert into the new one to turn one into the other? the classic answer is myers' algorithm from 1986. picture a grid with the old file's lines down one side and the new file's lines across the other. moving right is an insert, moving down is a delete, and wherever two lines match you get a free diagonal step. the shortest diff is the path from the top-left corner to the bottom-right with the fewest non-diagonal steps.
+## what the engine does
 
-seams runs that in seven stages, and each stage is its own file:
+a line diff answers one question. which lines do you delete from the old file and add to the new one, and what is the smallest set that gets you there? the standard answer is myers' algorithm from 1986. you draw the old file down the side of a grid and the new file along the top. a step right adds a line, a step down deletes one, and wherever two lines are the same you get a free step along the diagonal. the shortest diff is the path from one corner to the other with the fewest steps that aren't diagonal.
 
-1. scan: find where every line starts and how long it is.
-2. trim: skip the identical lines at the start and end.
-3. hash: give every remaining line a 64-bit hash.
-4. intern: turn each distinct line into a small integer id.
-5. myers: find the shortest edit path over those ids.
-6. emit: turn "this line changed" into change records.
-7. apply: rebuild the new file from the old one and the records, to prove the records are right.
+seams does it in stages, one file each. it finds where every line starts, skips the lines that match at the top and bottom, hashes what's left, turns each distinct line into a small number, runs myers on the numbers, and writes out the changes. after the fourth stage the text is gone. `return x;` is just 412, and comparing two lines is comparing two integers.
 
-after stage four, the algorithm never looks at text again. `return x;` is just id 412, and comparing two lines is comparing two integers.
+## naming every register
 
-## the first rule: name everything
+the first rule i set for the assembly was that no register gets used before it has a name. `mov [r8 + rcx*4], r11d` tells you nothing. with `%define starts r8`, `%define cursor rcx` and `%define line_start32 r11d` at the top, the same instruction reads `mov [starts + cursor*4], line_start32`, and somebody else can review it. nasm swaps the names back before it assembles, so it costs nothing.
 
-assembly has a reputation for being unreadable. what makes it unreadable is mostly registers. `mov [r8 + rcx*4], r11d` tells you nothing. so the first rule in this codebase was that every register gets a name before it's used:
+the second rule was that every struct offset lives in one file, `layout.inc`. the bug i was most worried about was reading field seven when i meant field six. with one source of truth that turns into an assembler error instead of a wrong answer.
 
-```nasm
-%define bytes rdi
-%define length rsi
-%define cursor rcx
-%define starts r8
-%define line_start r11
-%define line_start32 r11d
-```
+## a million newlines
 
-after that, the line above reads `mov [starts + cursor*4], line_start32`, and you can review it. the names cost nothing at runtime because nasm swaps them back before it assembles anything. the second rule was that every struct offset lives in one file, `layout.inc`. the bug i was most scared of was reading field seven when i meant field six, and with one source of truth that becomes an assembler error instead of a wrong answer at 2am.
-
-## finding a million newlines
-
-the scanner is the first thing that touches the file, so it runs once per byte. a plain loop compares one byte with `\n`, branches, and moves on. the avx2 version reads 32 bytes at once:
+the first stage touches every byte of the file, so it's the hottest loop in the program. the plain version reads one byte, compares it with `\n`, branches, and moves on. the avx2 version reads 32 bytes at once.
 
 ```nasm
 vmovdqu chunk, [bytes + cursor]
 vpcmpeqb chunk, chunk, newline     ; 0xff wherever a byte is '\n'
-vpmovmskb mask, chunk              ; squash that into one bit per byte
+vpmovmskb mask, chunk              ; one bit per byte
 ```
 
-`newline` is a register holding 32 copies of the byte 10. after those three instructions, "where are the newlines in these 32 bytes" turns into "which bits are set in this 32-bit integer". two more instructions finish the job. `tzcnt` finds the lowest set bit, which is the next newline, and `blsr` clears it. the loop runs once per newline instead of once per byte, so on source code it branches about once every forty bytes.
+`newline` holds 32 copies of the byte 10. after those three instructions the question "where are the newlines in these 32 bytes" has become "which bits are set in this integer". `tzcnt` gives the lowest set bit, which is the next newline, and `blsr` clears it. the loop now goes round once per newline instead of once per byte, which on source code is about once every forty bytes.
 
-there's also a scalar version in the same file, and i wrote it first on purpose. it's the spec. the test harness runs both on twenty thousand random buffers, and the avx2 one has to produce exactly the same table every time.
+i wrote the plain version first and kept it as the spec. the tests run both on twenty thousand random buffers and they have to produce the same table every time.
 
-## most of the speed comes from not diffing
+## most of the speed is in skipping
 
-real edits are small. you change twelve lines in the middle of a five-thousand-line file, and everything above and below is identical. so before hashing anything, seams finds the longest common prefix and suffix of the raw bytes, eight at a time with one 64-bit xor, then binary searches the line table to round them to whole lines. those lines can never be part of a minimal diff, so the expensive stages never see them.
+real edits are small. you change twelve lines in the middle of a five-thousand-line file and the rest is identical. so before it hashes anything, seams compares the two files from both ends, eight bytes at a time with a 64-bit xor, and rounds the matching stretch to whole lines. those lines can't be part of the smallest diff, so the expensive stages never see them.
 
-i benchmarked this on 3,000 real before-and-after pairs of `.c` and `.h` files pulled from linux kernel commits. seams takes 166 ms for all of them, and imara-diff, a fast rust library, takes 319 ms with its default myers. most of that gap is the trim. the fastest diff is the one you skip.
+i tested this on 3,000 real before-and-after pairs of `.c` and `.h` files from linux kernel commits. seams took 166 ms for all of them and imara-diff, a fast rust library, took 319 ms with its default myers. the skipping is most of that difference.
 
-the honest other side: on files with ten thousand edits scattered all through them, seams in exact mode is 2.2 to 2.7 times slower than imara. it insists on the minimal answer, and imara's default trades a little minimality for speed.
+it doesn't win everywhere. on files with ten thousand edits scattered all through them, exact seams is 2.2 to 2.7 times slower than imara.
 
 ## when myers takes forever
 
-exact myers has a nasty worst case. take two files that contain the same lines in a different order, and the search can wander the grid for a very long time. on 40,000 shuffled lines the exact search took 5.4 seconds.
+myers has a bad case. give it two files that contain the same lines in a different order and it can wander the grid for a long time. forty thousand shuffled lines took 5.4 seconds.
 
-the fix is a budget. the linear-space version of myers searches from both corners at once, forward from the top-left and backward from the bottom-right, until the two searches meet somewhere in the middle. that meeting point is the "middle snake", and the problem splits there into two smaller ones. in fast mode, each of those searches gets roughly the square root of the problem size in rounds. if it runs out, it stops looking for the perfect meeting point and splits at the furthest point the forward search reached. the same 40,000 lines now take 0.9 seconds, and the diff is 0.33% longer. fast mode is the default, and `--minimal` gives you the exact one back.
+the version seams uses searches from both corners at once and splits the problem where the two searches meet. so i gave each search a budget of about the square root of the problem size. when the budget runs out, it stops looking for the perfect meeting point and splits at the furthest point the forward search got to. the same forty thousand lines take 0.9 seconds that way, and the diff comes out 0.33% longer. that's the default now, and `--minimal` gets you the exact one.
 
-## the browser can't run x86
+that routine also had a hole in its tests that i only found by accident. while making a video of the code being written, i put a deliberate mistake into it, comparing a position against the wrong side's limit, and the whole test suite still passed. the only cutoff test used two files of the same length, so the search box was square and both limits were the same number. i added lopsided cases, forty thousand lines against fourteen thousand. the mistake crashes those. they also showed the real cost of the shortcut on lopsided files, which is a diff about 9% longer, not 0.33%.
 
-so i wrote the whole pipeline again in webassembly text, the human-readable form of wasm, by hand. simd in wasm is 16 bytes wide instead of 32, so the scanner and the trim work in half-size steps. the compiled module is about 5 kb.
+## writing it again for the browser
 
-the important part is the test. for every random pair the native fuzzer generates, the wasm version has to produce exactly the same change records as the assembly. that test caught most of my porting mistakes within minutes.
+browsers can't run x86, so the whole pipeline exists a second time in webassembly text, written by hand. webassembly's simd is 16 bytes wide instead of 32, so the scanner and the skipping take half-size steps. the compiled module is about 5 kb.
 
-it also caught the strangest bug of the project. one day the wasm build got 175 times slower: 42 ms on 100,000 lines became 7.4 seconds, and the output was still correct. there's a test-only build of the engine with a deliberately terrible hash, where every line collides with half the file, and the build script strips that hash out of the real build with a regex. a file had been saved with windows line endings. the regex expected `\n` and saw `\r\n`, so it matched nothing, and the terrible hash went into the real build. every lookup collided, every collision got checked byte by byte, and so the answer stayed right and got very slow. normalising line endings in the build script fixed it, and the build now runs at 43 ms for exact mode and 19 ms for fast.
+for every random pair the native tests generate, the webassembly version has to produce exactly the same changes as the assembly. that check caught most of my porting mistakes within minutes.
+
+it also caught the strangest bug in the project. one day the browser build got 175 times slower. 42 ms on 100,000 lines became 7.4 seconds, and every answer was still correct. there's a test build of the engine with a deliberately terrible hash, so that every line collides with half the file, and the build script removes that hash from the real build with a regex. one file had been saved with windows line endings. the regex expected `\n`, got `\r\n`, matched nothing, and the terrible hash went into the real build. every collision was still checked byte by byte, which is why the answers stayed right while it got slow. one line that normalises line endings fixed it.
 
 ## drawing a million lines
 
-the diff was never the bottleneck in the browser. a normal viewer builds html: a div per line and a span per highlighted token. at a million lines that's millions of dom nodes, and layout alone takes seconds.
+in the browser the drawing is the slow part. a normal viewer builds html, a div for each line and a span for each coloured word. a million lines is millions of elements, and the browser spends seconds just working out where they go.
 
-seams draws on a canvas with webgl2. every character on screen is one small rectangle, and its letter comes from a glyph atlas, a texture with each character drawn once. each frame, the viewer works out which rows are visible, fills one buffer with "this glyph, at this spot, in this colour", and paints the lot with a single instanced draw call. that costs about 0.2 ms of cpu per frame no matter how long the file is. on my 145 hz display the slowest 1% of frames still come in under 8 ms.
+seams draws on a canvas with webgl2. each character is a small rectangle that takes its letter from a texture with every character drawn into it once. each frame the viewer works out which rows are on screen, fills one buffer with which letter goes where in which colour, and draws all of it with one call. that costs about 0.2 ms of cpu a frame whatever the size of the file, and the slowest 1% of frames still come in under 8 ms.
 
-the price is that the browser gives you nothing for free on a canvas. text selection, copy, find, and a hidden list of the visible lines for screen readers all had to be built by hand.
+the catch is that a canvas gives you nothing. selection, copy, find, and a hidden list of the visible lines for screen readers all had to be written by hand. so did whole-character drawing, so that an accent, a hindi conjunct or a family emoji made of three joined emoji comes out as one character instead of pieces.
 
-against a popular javascript diff library at its best settings, on the same million-line pair: first screen in 0.19 seconds against 6, fully highlighted in half a second against 41, and smooth scrolling against about a third of the frame rate. most of their first-screen time is their javascript diff, not their renderer, and their syntax highlighting is more accurate than my small lexers. the scrolling gap holds either way, because it's dom nodes against one draw call.
+against that javascript library at its best settings, on the same pair, seams shows the first screen in 0.19 seconds against 6 and finishes highlighting in half a second against 41. to be fair to it, most of its first-screen time is its javascript diff, and its syntax highlighting is better than my small lexers.
 
-## a friend's idea: don't diff in the browser at all
+## a friend's idea
 
-i showed this to a friend who does a lot of web performance work, and his first question was why the browser was computing the diff at all. if a diff is going to be viewed, like on a pull request page, compute it once on the server, ship the result, and let the browser only scroll.
+i showed this to a friend who does a lot of web performance work, and the first thing he asked was why the browser was computing the diff at all. if a diff is going to be looked at, compute it once on a server and let the browser only scroll.
 
-he was right, so seams has packs now. a `.seamspack` file holds both files, their line tables, the edit script and the highlighter's state at each line, all laid out as typed arrays the viewer can use directly. with a pack, a million-line diff shows its first frame in 34 ms instead of about 500, measured on my laptop on battery.
+he was right. a `.seamspack` file holds both files, their line tables, the changes and the highlighter's state at each line, laid out so the viewer can use it straight away. with a pack, the million-line diff shows its first frame in 34 ms instead of about 500, measured on a laptop running on battery.
 
-## patches and merges
+## a real pull request
 
-two smaller things fell out of having a fast, exact engine.
-
-a seams patch carries its inserted lines inside it, so you only need the old file to apply it. a hundred-edit change to a 32 mb file is a 7.5 kb patch. it also stores the length and hash of the file it was made from, so applying it to the wrong file fails loudly instead of producing garbage.
-
-and there's a three-way merge. it takes two edits of the same base file, keeps whichever side changed a region, takes identical changes once, and writes git-style conflict markers when both sides touched the same lines differently. it's checked byte for byte against a plain c version of the same algorithm on a hundred thousand random cases.
+the pull request view puts a file list next to the viewer and diffs every file in the background while you read the first one. i tested it on my fork of tinygrad, with 3,000 commits of real history opened as a single pull request. that's about 1,200 files and half a million changed lines. seams diffed all of them in a quarter of a second, and its totals matched `git diff --minimal` line for line.
 
 ## getting it
 
-the quickest way is the site. open [cintu07.github.io/seams](https://cintu07.github.io/seams), drop two files on it, and they get diffed and drawn right there in the tab. nothing is uploaded. so it's fine for private code too.
+the quickest way is [the site](https://cintu07.github.io/seams). drop two files on it and they are diffed and drawn in that tab. nothing is uploaded.
 
-for the command line, grab a build from the [releases page](https://github.com/Cintu07/seams/releases). linux gets one static binary, windows gets `seams.exe` in a zip, and intel macs get their own tarball. unpack it, put it on your path, and `seams old.txt new.txt` prints a unified diff the way `diff -u` would. one warning. the windows build isn't signed yet, so smart app control may block it the first time.
+for the command line there are builds on the [releases page](https://github.com/Cintu07/seams/releases). linux gets one static binary, windows gets `seams.exe`, and intel macs get a tarball. `seams old.txt new.txt` prints a unified diff like `diff -u` would. `seams patch old new > change.seams` writes a patch that carries its own lines, so a 32 mb file with a hundred edits travels as 7.5 kb, and `seams apply` refuses to apply it to the wrong file. `seams merge base ours theirs` does a three-way merge with the same conflict markers git uses.
 
-to put the viewer in your own page, import it straight from the site. no package manager, no install.
+the windows build comes from the same assembly. windows passes function arguments in different registers from linux, so instead of rewriting every routine, the header tells windows compilers to call the engine with the linux convention, and the compiler saves whatever windows needs around each call. ci checks that the windows and mac builds give the linux answers byte for byte.
 
-```js
-import { createDiffViewer } from 'https://cintu07.github.io/seams/lib/index.mjs';
-const viewer = createDiffViewer(el);
-await viewer.setFiles(before, after, { name: 'main.ts' });
-```
-
-the pull request tools still live in the repo. clone it, and from inside any git repository run
+for a branch in any git repository, clone seams and run
 
 ```sh
 node path/to/seams/tools/seams-review.mjs main..my-branch
 ```
 
-your browser opens that branch the way a pull request would show it, every changed file in a list on the left. on tinygrad, three thousand commits of history were ready to read in under a second. for github itself there's `extension/`, a small browser extension that adds an **open in seams** button next to every pull request title. build it with `node pkg/build.mjs && node extension/build.mjs` and load the folder unpacked from your browser's extensions page.
+and it opens in your browser like a pull request. for github there's a small browser extension in the repo that puts an **open in seams** button next to every pull request title. big pull requests come down as two snapshots of the repository, unpacked while they download, keeping only the files that changed.
 
-## when to reach for it
+## when it's worth using
 
-most diffs are thirty lines. any tool handles those, so use whatever you already have.
+most diffs are thirty lines and any tool is fine for those. i'd reach for seams when github says the diff is too large to show, when a coding agent has touched a few thousand lines and i still have to read them, for data that happens to be text like sql dumps, logs and csv files, and for comparing two runs of the same job.
 
-seams is for the ones that make everything else give up.
-
-- the pull request github won't render. lockfiles, generated code, snapshot tests, vendored dependencies, that one migration nobody wants to open.
-- whatever your coding agent just did. agents will happily touch two thousand lines across eighty files, and you still have to read every one of them.
-- data that happens to be text. sql dumps, json exports, csv, logs, terraform state. a million lines is a tuesday there.
-- two runs of the same thing. golden test outputs, two logs from the same job, a config before and after a deploy.
-- a huge file over a slow link. a seams patch carries its own lines, so a 32 mb file with a hundred edits travels as 7.5 kb.
-
-## using it well
-
-stop scrolling. on a big diff, `n` and `p` jump between changes, `ctrl f` searches all of it, and `v` flips between unified and split. in the pull request view, `]` and `[` walk through files, and typing `codegen` in the filter box takes twelve hundred files down to the five you care about.
-
-on the command line the default is fast mode. it keeps the search bounded when two files changed everywhere at once, and pays for that with a slightly longer diff, around 9% on the worst lopsided files i tested. add `--minimal` when you need the smallest diff there is. `seams patch old new > change.seams` writes a patch. `seams apply old change.seams` rebuilds the new file. `seams merge base ours theirs` does a three-way merge with the same conflict markers git uses.
-
-and if lots of people open the same diff, a release diff or a busy pull request, compute it once in ci with `node tools/seams-pack.mjs old new -o change.seamspack` and serve the pack. the browser has nothing left to compute. a million-line diff shows its first frame in 34 ms that way.
+in the viewer, `n` and `p` jump between changes, `ctrl f` searches the whole diff and `v` switches to side by side. in the pull request view `]` and `[` move between files and the box at the top filters them, so typing `codegen` takes twelve hundred files down to the five you want.
 
 ## what's still missing
 
-the first version of this post had a longer list here. colour emoji, hindi text, the pull request view and the windows and mac builds have all been done since then.
-
 imara-diff is still faster than seams on files with thousands of scattered edits, and i haven't worked out yet whether that gap can be closed. there's no arm64 build, so apple silicon macs run the intel one through rosetta. the windows binary isn't signed yet either, so smart app control may block it the first time you run it.
 
-the code is on [github](https://github.com/Cintu07/seams) and the live viewer is on [the site](https://cintu07.github.io/seams).
+the code is on [github](https://github.com/Cintu07/seams).
