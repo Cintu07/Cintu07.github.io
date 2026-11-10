@@ -66,7 +66,7 @@ in the browser the drawing is the slow part. a normal viewer builds html, a div 
 
 seams draws on a canvas with webgl2. each character is a small rectangle that takes its letter from a texture with every character drawn into it once. each frame the viewer works out which rows are on screen, fills one buffer with which letter goes where in which colour, and draws all of it with one call. that costs about 0.2 ms of cpu a frame whatever the size of the file, and the slowest 1% of frames still come in under 8 ms.
 
-the catch is that a canvas gives you nothing. selection, copy, find, and a hidden list of the visible lines for screen readers all had to be written by hand. so did whole-character drawing, so that an accent, a hindi conjunct or a family emoji made of three joined emoji comes out as one character instead of pieces.
+a canvas comes with none of the browser's usual behaviour, though. selection, copy, find, and a hidden list of the visible lines for screen readers all had to be written by hand. so did whole-character drawing, so that an accent, a hindi conjunct or a family emoji made of three joined emoji comes out as one character instead of pieces.
 
 against that javascript library at its best settings, on the same pair, seams shows the first screen in 0.19 seconds against 6 and finishes highlighting in half a second against 41. to be fair to it, most of its first-screen time is its javascript diff, and its syntax highlighting is better than my small lexers.
 
@@ -84,7 +84,7 @@ the pull request view puts a file list next to the viewer and diffs every file i
 
 the quickest way is [the site](https://cintu07.github.io/seams). drop two files on it and they are diffed and drawn in that tab. nothing is uploaded.
 
-for the command line there are builds on the [releases page](https://github.com/Cintu07/seams/releases). linux gets one static binary, windows gets `seams.exe`, and intel macs get a tarball. `seams old.txt new.txt` prints a unified diff like `diff -u` would. `seams patch old new > change.seams` writes a patch that carries its own lines, so a 32 mb file with a hundred edits travels as 7.5 kb, and `seams apply` refuses to apply it to the wrong file. `seams merge base ours theirs` does a three-way merge with the same conflict markers git uses.
+for the command line there are builds on the [releases page](https://github.com/Cintu07/seams/releases). linux gets one static binary, windows gets `seams.exe`, and intel macs get a tarball. `seams old.txt new.txt` prints a unified diff like `diff -u` would. there's also a patch command that writes patches carrying their own lines, so a 32 mb file with a hundred edits travels as 7.5 kb, and applying one to the wrong file is refused. and `seams merge base ours theirs` does a three-way merge with the same conflict markers git uses.
 
 the windows build comes from the same assembly. windows passes function arguments in different registers from linux, so instead of rewriting every routine, the header tells windows compilers to call the engine with the linux convention, and the compiler saves whatever windows needs around each call. ci checks that the windows and mac builds give the linux answers byte for byte.
 

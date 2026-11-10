@@ -1,37 +1,29 @@
 ---
-title: Building a Membership System That Says "I Don't Know"
+title: a membership system that can say "i don't know"
 date: 2025-10-24
-description: Most failure detectors lie. STYX is a distributed membership system that returns a probability distribution instead of a boolean, handling uncertainty with honesty.
+description: styx is a distributed membership system that answers "is this node alive?" with a probability distribution, and refuses to answer when the cluster disagrees with itself.
 tags: Distributed Systems, Go, Architecture
 cover: /assets/img/styx-hero.jpg
 ---
-Most failure detectors lie. Not maliciously. They just can't handle uncertainty, so they force a binary answer when they don't have enough information to give one. A node times out, the detector marks it dead, and downstream systems treat that as fact. Sometimes it's right. Sometimes the node was just under load, the network was slow, or a GC pause ate the timeout window. Getting it wrong in the dead direction is usually worse than getting it wrong in the alive direction. You split the cluster, drop connections, trigger failover sequences that are hard to reverse.
+a failure detector has to answer one question, whether a node is alive, and the usual way to answer it is a timeout. you send a ping, nothing comes back in time, and the node is marked dead. that's often wrong. the node might be stuck in a gc pause, the network might be slow for a few seconds, or the machine might be so busy that it answers late. the detector can't tell these apart from a crash, so it guesses, and everything downstream treats the guess as a fact.
 
-STYX is a distributed membership system that returns a probability distribution instead of a boolean. You ask whether a node is alive and it says something like: alive 61%, dead 19%, unknown 20%. If it doesn't have enough information, it says unknown instead of guessing. If it detects a network partition where different parts of the cluster see different things, it refuses to answer at all.
+guessing dead when the node is alive is the expensive mistake. the cluster splits and failover starts, and some of that is hard to undo.
 
-This is a writeup of how it was built and why specific decisions were made.
+styx is the membership system i wrote to stop guessing. ask it whether a node is alive and it answers with a distribution, something like alive 61%, dead 19%, unknown 20%. when it doesn't have enough to go on, most of the weight sits on unknown. when different parts of the cluster see different things, which is what a network partition looks like, it refuses to answer at all.
 
 ![STYX Architecture Diagram](/assets/img/styx-diagram.svg)
 
----
+## two failures that look the same
 
-## The core problem
+from the outside, a node that has died and a node that can't be reached right now look identical. the process might have crashed or the disk died. or the network path is congested, the process is paused, or the cpu is saturated and probes are answered too late.
 
-Standard health checks have two failure modes that look identical from outside.
+the two need opposite responses. a dead node should be routed around and recovered. an unreachable one should be waited for. treat the second like the first and you start recovery nobody needed, push extra load onto the rest of the cluster, and sometimes cause the outage you were trying to detect.
 
-The first is real failure: the process crashed, the disk died, the machine is gone.
+so styx treats a timeout as evidence, and weak evidence at that. how weak depends on how long it waited, whether its own machine was struggling at the time, and whether other nodes saw the same thing.
 
-The second is temporary unreachability: the network path is congested, the process is paused for GC, the machine is CPU-saturated and not responding to probes within the timeout window.
+## a distribution instead of a boolean
 
-Both look the same to a naive detector. You send a ping, you wait, you get nothing back, you declare death. The problem is that the two cases require completely different responses. Real failure means route around the dead node and start recovery. Temporary unreachability means wait. If you confuse them, you make the second case worse. You trigger unnecessary recovery, create cascading load, and sometimes cause the very outage you were trying to detect.
-
-The fix is to stop treating a timeout as proof of death. It is evidence. Weak evidence. How weak depends on how long you waited, whether your own machine was under load at the time, and whether other witnesses saw the same thing.
-
----
-
-## Representing uncertainty as a distribution
-
-Instead of a boolean, STYX uses a three-value probability distribution over every node: `{alive, dead, unknown}`, where the three values sum to 1.
+every node gets three numbers that add up to one.
 
 ```go
 type Belief struct {
@@ -41,7 +33,7 @@ type Belief struct {
 }
 ```
 
-`Confidence` is a float64 constrained to `[0, 1]`. The `NewBelief` constructor validates that the three values sum to 1.0 within floating-point tolerance before accepting them:
+`Confidence` is a float64 between 0 and 1, and the constructor checks the sum before it accepts anything.
 
 ```go
 func NewBelief(alive, dead, unknown float64) (Belief, error) {
@@ -53,21 +45,13 @@ func NewBelief(alive, dead, unknown float64) (Belief, error) {
 }
 ```
 
-The invariant is enforced at construction time so nothing downstream can accidentally use an invalid distribution. Before any evidence arrives, a node starts with `{0, 0, 1}`, which is total uncertainty. That is the honest starting state.
+checking it at construction means nothing later can be handed a broken distribution. a node starts at `{0, 0, 1}`, completely unknown, before any evidence comes in.
 
-A few constraints are baked in as properties the code is written to enforce:
+three rules sit on top. no node ever reaches `{1, 0, 0}` or `{0, 1, 0}`, because evidence alone can take it to 90% at most. unknown never drops below 5%. and evidence that conflicts makes unknown bigger instead of being averaged away. the 90% cap is there because certainty is rare and expensive in a distributed system, and the 5% floor covers the failures the model doesn't know about yet. if the system is going to be cautious about anything, it should be cautious about claiming to be sure.
 
-- Belief is never binary. No node ever reaches `{1, 0, 0}` or `{0, 1, 0}`. The maximum certainty allowed from evidence alone is 90%.
-- Unknown is always a floor. Unknown is never allowed to drop below 5%.
-- Conflicting evidence widens uncertainty instead of resolving it.
+## not all evidence weighs the same
 
-These are not arbitrary. The 90% cap exists because certainty in distributed systems is rare and expensive to establish. The 5% floor on unknown exists because there is always the possibility of observer error or failure modes that the model does not cover. If a system is going to be conservative anywhere, it should be conservative about claiming certainty.
-
----
-
-## Evidence types and why they don't all weigh the same
-
-The system collects several types of evidence about a node's liveness.
+styx collects six kinds of evidence.
 
 ```go
 const (
@@ -80,9 +64,9 @@ const (
 )
 ```
 
-A `DirectResponse` is the strongest evidence. You sent a probe, got a response, the node is alive right now at that timestamp. The weight starts at 1.0 and decays slightly for high latency. A 1500ms response suggests something is degraded, so the weight drops to 0.6.
+a direct response is the strongest. you sent a probe and got an answer, so the node was alive at that moment. its weight starts at 1.0 and drops if the answer was slow, down to 0.6 for a 1500 ms response, because a slow answer says something is degraded.
 
-A `Timeout` is the weakest. The code makes this explicit:
+a timeout is the weakest, and the code says so.
 
 ```go
 // Per Property 4 and 15: timeouts are WEAK evidence, never proof of death.
@@ -96,19 +80,17 @@ func NewTimeout(...) Evidence {
 }
 ```
 
-Even if you waited ten times the expected duration and got nothing, the maximum timeout evidence weight is 0.3. That will not push dead confidence to anywhere near the 85% threshold required to declare death. Multiple timeouts from multiple witnesses might eventually get there, but a single timeout never will.
+even after waiting ten times longer than expected, a timeout weighs 0.3. one of them can't get dead confidence anywhere near the 85% needed to declare death. several timeouts from several witnesses might, eventually.
 
-A `CausalEvent` is the other strong signal. If the node was observed to have produced a causally linked event, something that could only have been created by that process, then the node was alive at that logical timestamp. Weight is always 1.0 for causal events.
+a causal event is the other strong signal. if the node produced something that only that process could have produced, it was alive at that logical time, and the weight is always 1.0.
 
-`SchedulingJitter` and `NetworkInstability` are modifier evidence. They don't say the node is alive or dead. They say that other evidence should be taken less seriously because local conditions were degraded.
+scheduling jitter and network instability don't say anything about the target. they say the local machine was in a bad state, so its other evidence should count for less.
 
----
+## when the observer is the problem
 
-## Jitter tracking
+a timeout can be wrong for reasons that have nothing to do with the node being checked. if the machine sending the probe is busy, in a gc pause, or running hot, the probe might go out late, or the reply might sit in a queue while the thread that should read it is paused.
 
-One specific problem with timeout-based evidence is that it can be wrong for reasons that have nothing to do with the target node. If your own machine is under load, running hot, doing a GC pause, or processing a large request, your timeouts become unreliable. You might not have sent the probe on time, or the response might have arrived and sat in a queue while your thread was paused.
-
-STYX tracks local scheduling jitter separately and uses it to discount timeout evidence:
+styx measures its own scheduling jitter and uses it to discount timeouts.
 
 ```go
 func (jt *JitterTracker) GetJitterFactor() float64 {
@@ -126,7 +108,7 @@ func (jt *JitterTracker) GetJitterFactor() float64 {
 }
 ```
 
-The jitter factor is then applied to every timeout evidence weight before it gets recorded:
+every timeout's weight gets multiplied by that factor before it is recorded, and capped at 0.3 either way.
 
 ```go
 ev = evidence.NewTimeout(ts, expectedMS, actualDuration.Milliseconds(), source, target)
@@ -137,15 +119,11 @@ if ev.Weight > 0.3 {
 }
 ```
 
-The result is that timeouts observed during high-jitter periods get almost no weight. The system effectively says: "I know I didn't get a response, but I also know my own machine was misbehaving, so I can't blame the target."
+so a timeout seen while the local machine was struggling counts for almost nothing. in plain words the detector is saying that it didn't get an answer, but its own machine was misbehaving at the time, so it can't blame the other node. this matters because the two problems tend to arrive together. a machine loaded enough to time out its probes is usually loaded enough to have jitter, and a naive detector reads both as the target failing.
 
-This matters in production because machines that are under load enough to start timing out probes are also usually experiencing scheduling jitter. The two failure modes correlate, and naive detectors interpret both as evidence that the target is failing.
+## old evidence fades
 
----
-
-## Evidence decay
-
-Evidence gets stale. A direct response from three minutes ago is weaker evidence of current liveness than a response from three seconds ago.
+an answer from three minutes ago says less about now than an answer from three seconds ago.
 
 ```go
 func (e Evidence) EffectiveWeight(now styxtime.LogicalTimestamp, halfLife uint64) float64 {
@@ -155,17 +133,13 @@ func (e Evidence) EffectiveWeight(now styxtime.LogicalTimestamp, halfLife uint64
 }
 ```
 
-The default half-life is 100 logical time units. Evidence that is twice as old as the half-life has 25% of its original weight. The system naturally shifts from "confident alive from recent responses" toward "uncertain, need fresher data" as time passes without new evidence.
+the default half-life is 100 logical time units, so evidence twice that old keeps a quarter of its weight. when a node stops answering, its old "alive" evidence fades, and unknown slowly comes back up. without the decay, a partitioned node would look alive forever on the strength of answers it gave before the split.
 
-This is important for the partitioned case. If a node becomes unreachable, you do not want the old alive evidence to stay strong forever. The decay ensures that as time passes without new responses, unknown starts creeping back up.
+## logical time instead of wall clocks
 
----
+wall clocks can't be trusted across machines. ntp can step backwards, virtual machines drift, and a machine that froze can wake up with a time that is hours behind everyone else.
 
-## Logical timestamps instead of wall clocks
-
-Wall clocks are unreliable in distributed systems. NTP can jump backwards. Virtualization causes drift. A machine can freeze and then resume with a timestamp that is hours in the past relative to other nodes.
-
-STYX uses Lamport-style logical timestamps throughout:
+styx uses lamport timestamps everywhere.
 
 ```go
 // Lamport's rule: ts = max(local_ts, received_ts) + 1
@@ -178,15 +152,11 @@ func (t *LogicalTimestamp) Update(received LogicalTimestamp) LogicalTimestamp {
 }
 ```
 
-This captures the "happens-before" relationship between events without requiring synchronized clocks. If event A caused event B, then `ts(A) < ts(B)`. The evidence decay uses logical timestamps, so "stale" means "causally distant" rather than "temporally old."
+if event a caused event b, then `ts(a) < ts(b)`, and no clocks need to agree for that to hold. the decay runs on these timestamps, so "old" means many events ago. you can't turn that into minutes for a person to read, but for deciding how much an old answer should count, events-ago is the right measure.
 
-The tradeoff is that logical time does not translate directly to human-readable duration. You cannot say "this response is 3 minutes old" in logical time units. What you can say is "this response was recorded N events ago." For evidence weighting, that is the right primitive.
+## many witnesses
 
----
-
-## Multiple witnesses and aggregation
-
-No single observer has a complete view. STYX is designed to aggregate reports from multiple witnesses, where each witness is another node in the system reporting what it can see.
+no single node sees everything, so styx combines reports from witnesses, other nodes saying what they can see.
 
 ```go
 type WitnessReport struct {
@@ -197,9 +167,7 @@ type WitnessReport struct {
 }
 ```
 
-Aggregation is not a simple average. Two things complicate it.
-
-First, disagreement between witnesses increases uncertainty. If five witnesses all say 90% alive, that is a clear signal. If three say 90% alive and two say 85% dead, that disagreement itself is information. Something unusual is happening, and the right response is to widen the unknown band rather than just average the numbers.
+combining them is more than an average, for two reasons. when witnesses disagree, the disagreement is information. five witnesses at 90% alive is a clear picture. three at 90% alive and two at 85% dead means something odd is going on, and styx moves weight into unknown instead of averaging the numbers into a confident-looking middle.
 
 ```go
 if disagreement > 0.3 {
@@ -210,13 +178,11 @@ if disagreement > 0.3 {
 }
 ```
 
-Second, correlated witnesses do not provide independent evidence. If ten witnesses all have identical reports, that is not ten independent observations. It could be one cluster view replicated across ten nodes. Highly correlated witnesses get their combined confidence reduced by 30%.
+and witnesses that say exactly the same thing aren't independent. ten identical reports might be one view of the cluster copied ten times, so highly correlated witnesses have their combined confidence cut by 30%.
 
----
+## trust
 
-## Witness trust
-
-Not all witnesses are equally reliable. A witness that consistently gives accurate reports builds trust over time. A witness that consistently gives wrong reports loses trust.
+some witnesses are right more often than others, so each one carries a trust score.
 
 ```go
 const (
@@ -228,17 +194,13 @@ const (
 )
 ```
 
-Trust decays faster than it recovers. 0.1 per wrong report, 0.05 per correct report. A newly correct witness needs two correct reports to recover from one wrong report. Trust never reaches zero, the minimum is 0.1. A witness with minimum trust still has some influence, just not much.
+trust falls faster than it recovers, 0.1 for a wrong report and 0.05 for a right one, so it takes two good reports to make up for one bad one. it never goes below 0.1, which keeps even a poor witness slightly in the picture. reports are weighted by trust when they are combined.
 
-The trust system interacts with aggregation. Witness reports are weighted by trust score when computing the averaged belief.
+## partitions
 
----
+in a partition, groups of nodes see different worlds. group a can reach node x but not y, and group b can reach y but not x. "is x alive?" has no single answer, because it depends on which side you ask from.
 
-## Partition detection
-
-A network partition creates a situation where different groups of nodes have genuinely incompatible views of reality. Group A can see node X but not node Y. Group B can see Y but not X. There is no single correct answer to "is X alive?" because it depends on which partition you're in.
-
-STYX detects this pattern and refuses to answer:
+styx looks for that shape and refuses.
 
 ```go
 func (d *Detector) Analyze(reports []witness.WitnessReport, target types.NodeID) (PartitionState, *SplitReality) {
@@ -254,15 +216,11 @@ func (d *Detector) Analyze(reports []witness.WitnessReport, target types.NodeID)
 }
 ```
 
-If more than 40% of witnesses are in the minority view, the partition is considered confirmed and the oracle returns `refused: true` with `refusal_reason: "network partition detected - witnesses disagree"`.
+if more than 40% of the witnesses hold the minority view, the partition counts as confirmed, and the answer comes back with `refused: true` and the reason "network partition detected - witnesses disagree". averaging the two camps would give a 50/50 answer that looks like ordinary uncertainty and hides the fact that the cluster is split. a refusal says what is actually going on, and a caller can handle "i won't answer" differently from "50% alive".
 
-This is one of the stronger design choices. A lot of systems would average the conflicting reports and give you a 50/50 distribution, which looks like uncertainty but is actually hiding information. The information being hidden is that the cluster is split. An explicit refusal is more honest. The caller can handle "I don't know" differently from "50% alive, 50% dead."
+## death is final
 
----
-
-## Death and finality
-
-Death in STYX is irreversible. Once a node is declared dead, it stays dead permanently. If the process restarts and wants to rejoin, it must use a new node ID with an incremented generation counter.
+once styx declares a node dead, it stays dead. if the process comes back, it has to rejoin with a new identity, the same base id with the generation counter bumped.
 
 ```go
 func (n NodeID) Rebirth() NodeID {
@@ -273,9 +231,9 @@ func (n NodeID) Rebirth() NodeID {
 }
 ```
 
-This prevents zombie nodes. A node that was declared dead and then came back is, for the purposes of the system, a different node. The generation counter makes old and new identities distinguishable.
+that rules out zombies. a node that was declared dead and then came back is a different node as far as the system is concerned, and the generation number tells the two apart.
 
-The death declaration itself has a high threshold:
+declaring death has a high bar.
 
 ```go
 const (
@@ -286,9 +244,9 @@ const (
 )
 ```
 
-85% dead confidence from at least 3 witnesses with low disagreement and at least 30% of the evidence being non-timeout. That last constraint is key. If all you have is timeouts, three witnesses that got no responses, that is not enough to declare a node dead. You need at least some positive evidence. Witnesses that tried to communicate and got back something confirming non-responsiveness rather than just absence.
+85% dead confidence, at least three witnesses, little disagreement, and at least 30% of the evidence coming from something other than timeouts. the last one matters most. three witnesses that all heard nothing are still only reporting silence, and styx wants some positive sign that the node is unresponsive before it will call it dead.
 
-Attempting resurrection always fails:
+there's no way to undo it either.
 
 ```go
 func (e *Engine) AttemptResurrection(id types.NodeID) error {
@@ -299,13 +257,9 @@ func (e *Engine) AttemptResurrection(id types.NodeID) error {
 }
 ```
 
-There is no API to bring a dead node back to life. The only path is a new identity.
+## asking it
 
----
-
-## How queries work
-
-The Oracle type is the main interface. You call `Query(target)` and get back a `QueryResult`:
+the oracle is the part you talk to. `Query(target)` returns this.
 
 ```go
 type QueryResult struct {
@@ -321,11 +275,9 @@ type QueryResult struct {
 }
 ```
 
-The query path runs through several checks in order: finality check (is the node already declared dead), partition check (would answering be dishonest given a detected split), aggregation, and confidence threshold check.
+a query checks whether the node is already dead, then whether answering would hide a partition, then combines the reports, then checks the confidence. the `Evidence` field lists what went into the answer in plain words, like "aggregated 7 witness reports" or "finality: node declared dead", which helps a lot when you're trying to work out why it said what it said.
 
-The `Evidence` field in the result is a list of human-readable strings explaining what was considered. Things like "aggregated 7 witness reports", "some witness disagreement detected", "finality: node declared dead". This is useful for debugging because you can see why the system gave the answer it did.
-
-There is also `QueryWithRequirement` for when you need a specific confidence level:
+`QueryWithRequirement` takes a minimum confidence.
 
 ```go
 var StrictRequirement = RequiredConfidence{
@@ -335,23 +287,19 @@ var StrictRequirement = RequiredConfidence{
 }
 ```
 
-If the belief distribution does not meet the requirements, the oracle refuses to answer rather than returning a low-confidence result. The caller decides whether to use a strict or loose confidence requirement based on what they are doing with the answer.
+if the belief doesn't meet it, the oracle refuses instead of returning a weak answer, and the caller picks how strict to be based on what it's about to do with the result. there's also `MustQuery`, which panics on a refusal. its comment says "USE WITH CAUTION - defeats the purpose of STYX", and it's there for code that really can't handle "i don't know" and has to opt into the risk out loud.
 
-There is a `MustQuery` that panics on refusal. The comment in the code says "USE WITH CAUTION - defeats the purpose of STYX." It exists for cases where you genuinely cannot handle uncertainty and want to opt into the dangerous behavior explicitly.
+## over http
 
----
+the server has five endpoints.
 
-## The HTTP API
+- `GET /query?target=ID` returns a node's status
+- `POST /report` takes a witness's belief about a node
+- `POST /witnesses` registers a witness
+- `GET /health` is a health check
+- `GET /metrics` serves prometheus counters
 
-The server exposes five endpoints:
-
-- `GET /query?target=ID` - query node status
-- `POST /report` - submit a witness belief report
-- `POST /witnesses` - register a witness
-- `GET /health` - health check
-- `GET /metrics` - Prometheus-format counters
-
-A query returns:
+a query comes back like this.
 
 ```json
 {
@@ -368,7 +316,7 @@ A query returns:
 }
 ```
 
-A report submission:
+and a report goes in like this.
 
 ```json
 {
@@ -380,27 +328,11 @@ A report submission:
 }
 ```
 
-The server validates that the belief values sum to 1.0 before accepting the report. Invalid submissions get a 400 with an explanation.
+a report whose numbers don't add up to one gets a 400 with the reason.
 
----
+## the tla+ spec
 
-## What was left out on purpose
-
-A few things were explicitly not built in this version.
-
-**Multi-producer channels.** The current design is one-to-many: multiple witnesses report, one oracle aggregates. Multiple oracles with consensus is a different, harder problem that would require Paxos or Raft-style agreement on the death declaration. That is out of scope for now.
-
-**Built-in persistence.** If the oracle process restarts, all the accumulated reports are gone. Starting from scratch with no evidence is the correct behavior from an uncertainty perspective. You genuinely do not know anything after a restart. But it means recovery takes longer. Persistent evidence would require careful versioning and expiry logic.
-
-**Automatic probing.** The `Prober` module exists and has a `Probe` method, but it requires injecting a `ProbeFunc`. The actual mechanism for sending a probe is not provided. This keeps the core transport-agnostic but means you have to wire it up yourself.
-
-**The economics module.** There is staking and slashing in `economics/economics.go`. Witnesses can stake tokens and get slashed for wrong reports. This is not integrated into the main oracle flow. The idea is that economic incentives would prevent Byzantine witnesses from reporting falsely, but it requires a token system that does not exist yet.
-
----
-
-## The TLA+ spec
-
-There is a formal specification in `formal/Styx.tla` that models the core invariants. The important ones:
+`formal/Styx.tla` models the core rules.
 
 ```
 THEOREM Spec => []Property7_BeliefNeverBinary
@@ -409,30 +341,16 @@ THEOREM Spec => []Property13_FalseDeathForbidden
 THEOREM Spec => Property14_FinalityIrreversible
 ```
 
-The spec is simplified in places. `UpdateBeliefs` just sets a fixed distribution rather than modeling the actual aggregation math. It is sufficient to prove the structural properties but would not catch bugs in the aggregation algorithm itself. Useful for reasoning about the system's invariants, not a full correctness proof.
+the model is simpler than the code. `UpdateBeliefs` sets a fixed distribution instead of doing the real aggregation, so the spec proves the structural rules but would miss a bug in the maths. it's a way to reason about the invariants, not a proof that all of it is correct.
 
----
+## what isn't there yet
 
-## Current state
+there's only one oracle. several oracles agreeing on a death would need something like paxos or raft, and that's a separate, harder problem.
 
-The oracle and evidence subsystems work. The Prober needs a probe function injected. The economics module is disconnected. The BFT aggregator with ed25519 signatures is implemented but not wired into the main oracle flow. It sits parallel to the simpler `Aggregator`.
+nothing is persisted. if the oracle restarts, it starts from zero evidence, which is correct in a way, since after a restart it really doesn't know anything, but it means it takes a while to be useful again.
 
-There is no built-in transport between nodes. Reports have to be submitted via HTTP. A production deployment would need something that periodically sends reports from each node to the oracle about the nodes it can reach. That is two or three hundred lines of gossip protocol that has not been written yet.
+the prober has a `Probe` method but no way to send a probe of its own. you inject a `ProbeFunc`, which keeps the core independent of any transport and means you wire that part up yourself. there's also no transport between nodes. reports come in over http, so a real deployment needs a small gossip loop on each node that sends what it can see to the oracle, maybe two or three hundred lines that i haven't written.
 
-The formal spec proves the key invariants on a simplified model. The code implements them in a real system. The gap between the two, the aggregation math, the jitter discount, the evidence decay, is where the interesting bugs will live if they show up.
+the economics module in `economics/economics.go` lets witnesses stake tokens and get slashed for wrong reports, as a defence against lying witnesses. it isn't connected to the oracle, and it would need a token system that doesn't exist. the bft aggregator with ed25519 signatures is written too, but it sits next to the simpler aggregator instead of being used by it.
 
----
-
-## Practical lessons
-
-**Model uncertainty as a first-class type.** If your system has places where "I don't know" is a valid answer, build a type that represents it explicitly. Do not use nil, -1, or boolean false. Once `unknown` is a real value in the type system, you cannot accidentally treat it as known.
-
-**Separate evidence from conclusion.** The evidence set and the belief are different things. Evidence accumulates. Belief is computed from evidence on demand. This makes it easy to recompute beliefs with different decay parameters, add new evidence retroactively, or explain why the current belief is what it is.
-
-**Timeouts are weak evidence by default.** Absence of response is not the same as evidence of absence. Build the weak-by-default assumption into the evidence weight, then let multiple corroborating weak signals accumulate into something actionable.
-
-**Refusal is a valid answer.** Systems that can say "I don't know and won't guess" are safer than systems that always produce an answer. Callers can handle a refusal explicitly. They cannot handle a confidently wrong answer unless they independently verify it.
-
-**Logical clocks for causality, not wall clocks.** Any time you are comparing "which event came first" across processes, wall clocks will eventually lie to you. Lamport timestamps are simple, cheap, and correct for the causality question.
-
-**Death with finality prevents flapping.** If a node can come back from the dead with the same identity, membership systems develop weird corner cases around re-registration, stale state, and conflicting views. Making death irreversible and requiring a generation bump on rejoin eliminates the entire class of "is this the same node or a reborn one?" problems.
+the oracle and the evidence code work. the gap between them and the spec is the aggregation maths, the jitter discount and the decay, and that's where i'd expect the bugs to be if any turn up.
