@@ -5,9 +5,11 @@ description: on writing a line diff in nasm, porting it to webassembly by hand, 
 tags: assembly, simd, webassembly, webgl, performance
 cover: /assets/img/seams-cover.png
 ---
-git diffs a million-line file before you've let go of enter. put the same diff in a web viewer and you wait. the best javascript library i measured took six seconds to show the first screen and forty-one to finish highlighting. so the slow part in the browser was never really the diff. it was everything around it.
+i timed the best javascript diff viewer i could find on a million-line file. six seconds to show anything. forty-one before the colours were done. git had answered the same question before my finger left the enter key, so the browser was burning almost all of that time on drawing.
 
-that's how seams started. it's a line diff engine written in x86-64 assembly, the same engine written again by hand in webassembly so it runs in a browser, and a viewer that draws on the gpu. on my laptop a million-line diff shows its first screen in about 0.19 seconds and scrolls at the refresh rate of the display. this post is how it gets there, and most of the answer is "it skips work".
+seams is what i built instead. a line diff engine in x86-64 assembly, the same engine again by hand in webassembly so it runs in a browser, and a viewer that paints the whole screen on the gpu in one go. that million-line file opens in 0.19 seconds now, and it scrolls as fast as my screen refreshes.
+
+almost none of that speed is clever. most of it is skipping work.
 
 ## what a diff actually is
 
@@ -144,8 +146,8 @@ and if lots of people open the same diff, a release diff or a busy pull request,
 
 ## what's still missing
 
-most of what this list used to say is done now. emoji draw in colour, accents and hindi conjuncts draw properly, and there's a pull request view that opens a five-thousand-file pr in about 60 ms and diffs every file in the background in about a second. seams runs on windows and intel macs too, and ci checks both give linux's answers byte for byte.
+less than when i started writing this. colour emoji, hindi, the five-thousand-file pull request view, the windows and mac builds, all of that landed after this went up the first time.
 
-what's left is honest work. fast mode is benchmarked now, and on files with thousands of scattered edits imara-diff is still faster. there's no native arm64 engine, so apple silicon runs the intel binary through rosetta. and the windows binary isn't signed yet, so smart app control may block it.
+three things haven't. imara-diff still beats seams when a file changes in thousands of scattered places, and i don't know yet whether i can close that gap. there's no arm64 engine, so apple silicon runs the intel build through rosetta. and the windows binary isn't signed, so smart app control may refuse to run it until somebody official vouches for me.
 
-the code is on github at [cintu07/seams](https://github.com/Cintu07/seams), and the site at [cintu07.github.io/seams](https://cintu07.github.io/seams) runs the real viewer on seams' own source and on the million-line demo. you can also drop two of your own files in, and nothing leaves your machine. if you have a diff that breaks everything else, i'd like to see it.
+the code is on [github](https://github.com/Cintu07/seams). [the site](https://cintu07.github.io/seams) runs the real viewer, and you can drop your own files on it. if you've got a diff that kills every other tool, send it to me. i want to see what it does to this one.
