@@ -102,6 +102,8 @@ and there's a three-way merge. it takes two edits of the same base file, keeps w
 
 ## what's still missing
 
-emoji draw in one colour, and combining accents don't draw at all. a pull-request-sized view with five thousand files isn't built yet. the fast mode hasn't been benchmarked against imara-diff, only exact mode has. and there's no mac or windows binary yet.
+most of what this list used to say is done now. emoji draw in colour, accents and hindi conjuncts draw properly, and there's a pull request view that opens a five-thousand-file pr in about 60 ms and diffs every file in the background in about a second. seams runs on windows and intel macs too, and ci checks both give linux's answers byte for byte.
+
+what's left is honest work. fast mode is benchmarked now, and on files with thousands of scattered edits imara-diff is still faster. there's no native arm64 engine, so apple silicon runs the intel binary through rosetta. and the windows binary isn't signed yet, so smart app control may block it.
 
 the code is on github at [cintu07/seams](https://github.com/Cintu07/seams), and the site at [cintu07.github.io/seams](https://cintu07.github.io/seams) runs the real viewer on seams' own source and on the million-line demo. you can also drop two of your own files in, and nothing leaves your machine. if you have a diff that breaks everything else, i'd like to see it.
