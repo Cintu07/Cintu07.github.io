@@ -100,6 +100,48 @@ a seams patch carries its inserted lines inside it, so you only need the old fil
 
 and there's a three-way merge. it takes two edits of the same base file, keeps whichever side changed a region, takes identical changes once, and writes git-style conflict markers when both sides touched the same lines differently. it's checked byte for byte against a plain c version of the same algorithm on a hundred thousand random cases.
 
+## getting it
+
+the quickest way is the site. open [cintu07.github.io/seams](https://cintu07.github.io/seams), drop two files on it, and they're diffed and drawn in that tab. nothing gets uploaded, so this is fine for private code too.
+
+for the command line, the [releases page](https://github.com/Cintu07/seams/releases) has a build for each platform. linux is one static binary, windows is `seams.exe` in a zip, and intel macs get their own tarball. unpack it, put it somewhere on your path, and `seams old.txt new.txt` prints a unified diff like `diff -u` would. the windows build isn't signed yet, so smart app control may stop it the first time.
+
+to use the viewer inside your own page, import it straight from the site, no package manager involved:
+
+```js
+import { createDiffViewer } from 'https://cintu07.github.io/seams/lib/index.mjs';
+const viewer = createDiffViewer(el);
+await viewer.setFiles(before, after, { name: 'main.ts' });
+```
+
+the pull request tools live in the repo for now. clone it, then from inside any git repository
+
+```sh
+node path/to/seams/tools/seams-review.mjs main..my-branch
+```
+
+opens that branch in your browser the way a pull request would show it, with every changed file in a list on the left. for github itself, the `extension/` folder is a small browser extension that puts an **open in seams** button next to every pull request title. build it with `node pkg/build.mjs && node extension/build.mjs`, then load the folder unpacked from your browser's extensions page in developer mode.
+
+## when to reach for it
+
+most diffs are a few dozen lines, and any tool handles those fine. seams is for the ones that make everything else give up.
+
+- the pull request github won't render. lockfiles, generated code, snapshot tests, vendored dependencies, big migrations.
+- reviewing what a coding agent did. agents happily change two thousand lines across eighty files, and you still have to read all of it.
+- data that happens to be text. sql dumps, json exports, csv files, logs, terraform state. a million lines is a normal tuesday there.
+- comparing two runs of something. golden test outputs, two log files, a config before and after a deploy.
+- shipping a change to a huge file over a slow link. a seams patch carries its own lines, so a 32 mb file with a hundred edits travels as a 7.5 kb patch.
+
+## using it well
+
+a few habits make it noticeably nicer.
+
+on a big diff, don't scroll to find things. `n` and `p` jump to the next and previous change, `ctrl f` searches the whole diff, and `v` flips between unified and split view. in the pull request view, `]` and `[` move between files and the box at the top filters paths, so typing `codegen` narrows twelve hundred files down to the ones you care about.
+
+on the command line, the default is the fast mode, which keeps its search bounded on files that changed everywhere at once. if you need the provably smallest diff, add `--minimal`. `seams patch old new > change.seams` writes a patch, `seams apply old change.seams` rebuilds the new file, and `seams merge base ours theirs` does a three-way merge with git-style conflict markers.
+
+if the same diff gets opened by lots of people, like a release diff or a pull request page, compute it once in ci with `node tools/seams-pack.mjs old new -o change.seamspack` and serve the pack. the browser then has nothing left to compute, and a million-line diff shows its first frame in about 34 ms.
+
 ## what's still missing
 
 most of what this list used to say is done now. emoji draw in colour, accents and hindi conjuncts draw properly, and there's a pull request view that opens a five-thousand-file pr in about 60 ms and diffs every file in the background in about a second. seams runs on windows and intel macs too, and ci checks both give linux's answers byte for byte.
