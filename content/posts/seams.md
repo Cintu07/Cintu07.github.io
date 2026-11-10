@@ -5,11 +5,9 @@ description: on writing a line diff in nasm, porting it to webassembly by hand, 
 tags: assembly, simd, webassembly, webgl, performance
 cover: /assets/img/seams-cover.png
 ---
-i timed the best javascript diff viewer i could find on a million-line file. six seconds to show anything. forty-one before the colours were done. git had answered the same question before my finger left the enter key, so the browser was burning almost all of that time on drawing.
+i benchmarked the best javascript diff viewer i could find on a pair of files with a million lines each. it took six seconds to show anything and forty-one seconds to finish highlighting. git diff gets through the same two files in a fraction of that, so almost all of the time was going into drawing.
 
-seams is what i built instead. a line diff engine in x86-64 assembly, the same engine again by hand in webassembly so it runs in a browser, and a viewer that paints the whole screen on the gpu in one go. that million-line file opens in 0.19 seconds now, and it scrolls as fast as my screen refreshes.
-
-almost none of that speed is clever. most of it is skipping work.
+seams is my go at the browser side of that. the diff engine is written in x86-64 assembly, then again by hand in webassembly so it can run in a browser, and the viewer draws with webgl. on my laptop the same pair of files opens in about 0.19 seconds and scrolls at the refresh rate of the screen.
 
 ## what a diff actually is
 
@@ -146,8 +144,8 @@ and if lots of people open the same diff, a release diff or a busy pull request,
 
 ## what's still missing
 
-less than when i started writing this. colour emoji, hindi, the five-thousand-file pull request view, the windows and mac builds, all of that landed after this went up the first time.
+the first version of this post had a longer list here. colour emoji, hindi text, the pull request view and the windows and mac builds have all been done since then.
 
-three things haven't. imara-diff still beats seams when a file changes in thousands of scattered places, and i don't know yet whether i can close that gap. there's no arm64 engine, so apple silicon runs the intel build through rosetta. and the windows binary isn't signed, so smart app control may refuse to run it until somebody official vouches for me.
+imara-diff is still faster than seams on files with thousands of scattered edits, and i haven't worked out yet whether that gap can be closed. there's no arm64 build, so apple silicon macs run the intel one through rosetta. the windows binary isn't signed yet either, so smart app control may block it the first time you run it.
 
-the code is on [github](https://github.com/Cintu07/seams). [the site](https://cintu07.github.io/seams) runs the real viewer, and you can drop your own files on it. if you've got a diff that kills every other tool, send it to me. i want to see what it does to this one.
+the code is on [github](https://github.com/Cintu07/seams) and the live viewer is on [the site](https://cintu07.github.io/seams).
