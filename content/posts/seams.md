@@ -42,7 +42,7 @@ real edits are small. you change twelve lines in the middle of a five-thousand-l
 
 i tested this on 3,000 real before-and-after pairs of `.c` and `.h` files from linux kernel commits. seams took 166 ms for all of them and imara-diff, a fast rust library, took 319 ms with its default myers. the skipping is most of that difference.
 
-it doesn't win everywhere. on files with ten thousand edits scattered all through them, exact seams is 2.2 to 2.7 times slower than imara.
+it didn't win everywhere at first. on files with ten thousand edits scattered all through them, exact seams was 2.2 to 2.7 times slower than imara, and the faster mode below still lost by about a third.
 
 ## when myers takes forever
 
@@ -51,6 +51,8 @@ myers has a bad case. give it two files that contain the same lines in a differe
 the version seams uses searches from both corners at once and splits the problem where the two searches meet. so i gave each search a budget of about the square root of the problem size. when the budget runs out, it stops looking for the perfect meeting point and splits at the furthest point the forward search got to. the same forty thousand lines take 0.9 seconds that way, and the diff comes out 0.33% longer. that's the default now, and `--minimal` gets you the exact one.
 
 that routine also had a hole in its tests that i only found by accident. while making a video of the code being written, i put a deliberate mistake into it, comparing a position against the wrong side's limit, and the whole test suite still passed. the only cutoff test used two files of the same length, so the search box was square and both limits were the same number. i added lopsided cases, forty thousand lines against fourteen thousand. the mistake crashes those. they also showed the real cost of the shortcut on lopsided files, which is a diff about 9% longer, not 0.33%.
+
+the gap on dense edits closed later, after i read how git's diff and imara handle the same search. once a search has cost more than 256 steps, they check whether either front has just run along more than 20 matching lines, and if a point that far along exists they split there without waiting for the two searches to meet. seams' budget had a floor of 4096 steps, and on a file with an edit every ten lines most of the time went into searches that used all of it. i tried the change in a small c model before touching the assembly. on 100,000 lines with 10,000 edits it did about a seventh of the work and found exactly the same number of edits, so it went into both the assembly and the webassembly. that pair now takes 12.5 ms against imara's 16.1, and a million lines with 10,000 edits takes 89 ms against 115. `--minimal` is still slower than imara on those files, because it won't give up the shortest diff.
 
 ## writing it again for the browser
 
@@ -106,10 +108,10 @@ the tab it opens stays in step with the pull request. review comments from githu
 
 most diffs are thirty lines and any tool is fine for those. i'd reach for seams when github says the diff is too large to show, when a coding agent has touched a few thousand lines and i still have to read them, for data that happens to be text like sql dumps, logs and csv files, and for comparing two runs of the same job.
 
-in the viewer, `n` and `p` jump between changes, `ctrl f` searches the whole diff and `v` switches to side by side. in the pull request view `]` and `[` move between files and the box at the top filters them, so typing `codegen` takes twelve hundred files down to the five you want.
+in the viewer, `n` and `p` jump between changes, `ctrl f` searches the whole diff and `v` switches to side by side. there are seven colour themes, and one of them, `clear`, marks deleted lines orange and inserted lines blue, for people who can't tell red from green. in the pull request view `]` and `[` move between files and the box at the top filters them, so typing `codegen` takes twelve hundred files down to the five you want.
 
 ## what's still missing
 
-imara-diff is still faster than seams on files with thousands of scattered edits, and i haven't worked out yet whether that gap can be closed. there's no arm64 build, so apple silicon macs run the intel one through rosetta. the windows binary isn't signed yet either, so smart app control may block it the first time you run it.
+with `--minimal`, imara-diff's default mode is still faster than seams on files with thousands of scattered edits. there's no arm64 build, so apple silicon macs run the intel one through rosetta. the windows binary isn't signed yet either, so smart app control may block it the first time you run it.
 
 the code is on [github](https://github.com/Cintu07/seams).
