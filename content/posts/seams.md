@@ -76,13 +76,17 @@ i showed this to a friend who does a lot of web performance work, and the first 
 
 he was right. a `.seamspack` file holds both files, their line tables, the changes and the highlighter's state at each line, laid out so the viewer can use it straight away. with a pack, the million-line diff shows its first frame in 34 ms instead of about 500, measured on a laptop running on battery.
 
+he made two more points. the first was that most people reading a diff have a slower laptop than mine. chrome's devtools can slow the cpu down six times, so i opened the site's million-line demo that way. the first frame came at 0.46 seconds and wheel scrolling still didn't drop a frame. edge ignores that slowdown inside web workers, which is where seams diffs, so i timed the same wasm again on the main thread, where it does apply, and there the diff took between 0.4 and 0.6 seconds on each run.
+
+the second was that the page shouldn't have to wait for any javascript before you can read the diff. `seams-pack --page` now also writes an html page with the first 60 rows already in it. the text is readable before a script has run, and the viewer takes over on top of it at the same rows once the pack is in. the page is 6 kb, and for the million-line diff its text appears at 156 ms, or at 204 ms with the cpu slowed six times.
+
 ## a real pull request
 
 the pull request view puts a file list next to the viewer and diffs every file in the background while you read the first one. i tested it on my fork of tinygrad, with 3,000 commits of real history opened as a single pull request. that's about 1,200 files and half a million changed lines. seams diffed all of them in a quarter of a second, and its totals matched `git diff --minimal` line for line.
 
 ## getting it
 
-the quickest way is [the site](https://cintu07.github.io/seams). drop two files on it and they are diffed and drawn in that tab. nothing is uploaded.
+the quickest way is [the site](https://cintu07.github.io/seams). drop two files on it and they are diffed and drawn in that tab. nothing is uploaded. it also has three screen recordings of seams running and a short guide to each way of using it.
 
 for the command line there are builds on the [releases page](https://github.com/Cintu07/seams/releases). linux gets one static binary, windows gets `seams.exe`, and intel macs get a tarball. `seams old.txt new.txt` prints a unified diff like `diff -u` would. there's also a patch command that writes patches carrying their own lines, so a 32 mb file with a hundred edits travels as 7.5 kb, and applying one to the wrong file is refused. and `seams merge base ours theirs` does a three-way merge with the same conflict markers git uses.
 
@@ -94,7 +98,9 @@ for a branch in any git repository, clone seams and run
 node path/to/seams/tools/seams-review.mjs main..my-branch
 ```
 
-and it opens in your browser like a pull request. for github there's a small browser extension in the repo that puts an **open in seams** button next to every pull request title. big pull requests come down as two snapshots of the repository, unpacked while they download, keeping only the files that changed.
+and it opens in your browser like a pull request. for github there's a browser extension, `seams-extension.zip` on the releases page, that puts an **open in seams** button next to every pull request title. big pull requests come down as two snapshots of the repository, unpacked while they download, keeping only the files that changed.
+
+the tab it opens stays in step with the pull request. review comments from github show up as small numbered pins on their lines. hover a line number and a + appears, and a comment written there goes up to the pull request under your name. github only takes line comments near a change, so for any other line seams posts a comment on the whole file that starts with `L1980`, and pins it back on line 1980 when it reads it. when someone pushes, the tab notices within ten seconds (two minutes without a token), fetches only the files whose contents changed, and keeps you on the line you were reading. with a token, a check that finds nothing new doesn't count against github's rate limit. so far i've run this part against a fake github server in the tests, not on a live pull request.
 
 ## when it's worth using
 
