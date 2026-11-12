@@ -1,7 +1,7 @@
 ---
 title: a bias that does nothing broke pythia in bf16
 date: 2026-11-11
-description: activation patching on pythia-160m in bf16 said mlp layer 4 brings back 43% of the answer. fp32 said 3%. the cause was a key bias that cancels inside softmax and grew to 279 during training anyway.
+description: activation patching on pythia-160m in bf16 said mlp layer 4 brings back 43% of the answer. fp32 said 3%. the cause was a key bias that cancels inside softmax. fp16 training and adam grew it to 279 anyway, and it shows up outside pythia too.
 tags: Interpretability, Numerics, Attention, Pythia
 cover: /assets/img/kerneltrace-cover.png
 ---
@@ -23,7 +23,7 @@ patching takes one mlp layer's output from the clean run and puts it into the co
 
 pythia-160m's logits for these names sit near 836. bf16 keeps only 8 significant bits, and between 512 and 1024 that leaves it every fourth number and nothing in between. a logit diff of 5 comes out as 4, 8 or 0. that looked like the zeros.
 
-gpt-2 small has a milder version of the same thing. its logits sit around 80, where bf16 steps by 0.5. one prompt gave −1.5 run alone and −1.0 as one row in a batch of 15 copies of itself. fp32 gave −1.2814 both ways. doing only the last matmul, the unembedding, in fp32 got that to −1.2537 and −1.2168, and took gpt-2's median patching error from 0.027 to 0.006. i wrote about the same kind of batch-shape rounding in [speculative decoding](/posts/batch-invariance/).
+gpt-2 small has a milder version of the same thing. its logits sit around 80, where bf16 steps by 0.5. one prompt gave Ã¢Ë†â€™1.5 run alone and Ã¢Ë†â€™1.0 as one row in a batch of 15 copies of itself. fp32 gave Ã¢Ë†â€™1.2814 both ways. doing only the last matmul, the unembedding, in fp32 got that to Ã¢Ë†â€™1.2537 and Ã¢Ë†â€™1.2168, and took gpt-2's median patching error from 0.027 to 0.006. i wrote about the same kind of batch-shape rounding in [speculative decoding](/posts/batch-invariance/).
 
 on pythia it made things worse. the median patching error went from 0.10 to 0.46, which meant the output grid was only a small part of whatever was going on.
 
@@ -47,7 +47,7 @@ head 9 in layer 10, reading the last word. every score is between 35,622 and 35,
 
 ![fig. 4: the key bias adds the same number to every score a query makes, and softmax removes it.](/assets/img/kerneltrace/fig-04.png)
 
-it's the key bias. a head builds the key for token j as W·x + b, so the score of that key is q·(W·x) + q·b. the second term has no j in it. every key gets the same q·b, and softmax of s + c is the same as softmax of s. the term has no effect on the attention pattern.
+it's the key bias. a head builds the key for token j as WÃ‚Â·x + b, so the score of that key is qÃ‚Â·(WÃ‚Â·x) + qÃ‚Â·b. the second term has no j in it. every key gets the same qÃ‚Â·b, and softmax of s + c is the same as softmax of s. the term has no effect on the attention pattern. this part isn't new, namazifar and others pointed out in 2023 that the key bias is redundant for exactly this reason.
 
 pythia applies rotary embeddings to the first quarter of each head's dimensions. rotary turns the bias by position there, and that quarter does reach the attention pattern. in the other three quarters the bias is the same for every key. in pythia-160m that part of the bias has a norm of up to 279. the part rotary touches stays under 20. the query bias stays under 9.
 
@@ -55,9 +55,21 @@ pythia applies rotary embeddings to the first quarter of each head's dimensions.
 
 ![fig. 5: the invariant part of the key bias over pythia-160m's training, and in the final weights of every pythia size.](/assets/img/kerneltrace/fig-05.png)
 
-a term that softmax cancels gets no gradient from the loss, at least in exact math. it was 0 at step 0, 1.0 at step 1,000, 28 at 8,000, 120 at 32,000 and 279 at the end, step 143,000. i don't know what moved it. my guess is adam. it divides each update by the recent size of the gradient, and a gradient made of nothing but rounding noise would still get full-size steps that way. i haven't tested that.
+a term that softmax cancels gets no gradient from the loss, at least in exact math. it was 0 at step 0, 1.0 at step 1,000, 28 at 8,000, 120 at 32,000 and 279 at the end, step 143,000.
 
 pythia's training checkpoints are published as separate branches. a safetensors file starts with a json header that says where each tensor sits. with http range requests i read only the 12 bias tensors out of each checkpoint, a few kilobytes each. the same reader went through the final weights of every pythia size, up to 12b. 70m, 160m, 410m and 1.4b are over 100. 1b is at 18, and its bf16 numbers were fine all along.
+
+## why it grows
+
+my first guess was adam. later i found that the cerebras-gpt paper had already seen key biases grow during fp16 training, back in 2023, and put it down to underflow in the softmax gradients. they never tested it. so i did.
+
+![fig. 6: the invariant key bias of a small model trained from scratch, in fp32, fp16 and bf16.](/assets/img/kerneltrace/fig-06.png)
+
+i trained a small pythia-shaped model from scratch, 4 layers with rotary on a quarter of each head, the same seed and the same data every time, and only changed the precision. after 3,000 steps the invariant part is 0.004 in fp32, 0.34 in fp16 and 0.50 in bf16. the loss curves match to three decimals, so the three models learn the same thing.
+
+the gradient of that part is the sum of the softmax score gradient over the keys, times q. in exact math the sum is zero. in fp16 the score gradient gets rounded before the matmul, the sum stops being zero, and the invariant part gets a gradient about 2,600 times smaller than the rotary part's. adam divides every step by the gradient's own recent size, so the rotary part and the invariant part end up taking steps of about the same size anyway, 1.16 to 1. in fp32 the gradient is 800 times smaller again, it falls under adam's epsilon, and the step is close to zero.
+
+keeping only attention in fp32 and everything else in fp16 stops it, 0.004, same as full fp32. so does a large adam epsilon, but that also slows every other small weight down. what i still don't know is where the sign of the rounding error comes from, and what 143,000 steps would do in the small model.
 
 ## it isn't only patching
 
@@ -65,7 +77,7 @@ perplexity on the start of the wikitext-2 test set, 64 windows of 512 tokens, as
 
 | model | bf16 | fp16 | bf16, bias dropped | fp16, bias dropped | bf16, fp32 attention and head |
 |---|---|---|---|---|---|
-| gpt-2 small | +1.0% | +0.0% | +0.9% | +0.0% | −0.2% |
+| gpt-2 small | +1.0% | +0.0% | +0.9% | +0.0% | Ã¢Ë†â€™0.2% |
 | pythia-70m | +870% | nan | +396% | +3.1% | +0.6% |
 | pythia-160m | +171% | nan | +61% | +0.8% | +0.3% |
 | pythia-410m | +19.6% | nan | +0.1% | +0.0% | +0.0% |
@@ -87,8 +99,20 @@ in fp32 the logits move by at most 0.007 after this. fp32 drifts about that much
 
 it doesn't fix everything. 70m and 160m still need the unembedding in fp32, because their logits still sit near 836. 1.4b still overflows fp16, because the attention code multiplies q by k before it scales, and that raw product reaches 129,160 even with the bias gone. keeping attention and the unembedding in fp32 works on all six models, within 0.6% of fp32 perplexity. it costs more memory than deleting a bias does.
 
+## outside pythia
+
+any model with a key bias has this part. with learned positions or alibi it's the whole key bias, and with partial rotary it's the dims rotary skips. i read it out of 23 more checkpoints from eight families.
+
+![fig. 7: the invariant part of the key bias in other model families, largest per head, log scale.](/assets/img/kerneltrace/fig-07.png)
+
+santacoder's is 384 and bloom-560m's is 183, against query biases of 7 and 11. phi, stablelm-7b and gpt-neox-20b sit between 27 and 57. gpt-2 and opt stay under 10, and gpt-2 medium, large and xl are below their own query bias. it doesn't happen everywhere.
+
+qwen2.5 has rotary on every dim, so none of its key bias is exactly invariant. but its rotary base is a million, and its slowest dims barely turn across 4,096 positions. that's where its key bias lives, 920 in the 7b against 120 in every other dim. zeroing it there moves the fp32 logits by 0.18 and perplexity by under 0.01%.
+
+a big bias doesn't always break anything. santacoder gives nan on every fp16 window, and with the invariant part dropped its fp16 perplexity matches fp32. but its bf16 is only 0.1% off. bloom-560m loses 13% in bf16, and dropping its bias changes nothing, so that loss comes from something else. qwen and opt are fine in both.
+
 ## what i got wrong
 
-i committed predictions to the repo before each batch of runs. 8 of the 15 held. i had guessed pythia's bf16 batch jumps would be bigger than gpt-2's. on most prompts neither model jumped at all, and fewer pythia-160m prompts moved than gpt-2 prompts, 5 against 12, because a grid of 4 swallows small drift until it lets go in a step of 4 or 8. the fp32 unembedding was supposed to fix pythia. it didn't. i also thought 160m's 25 lost prompts would stay lost after deleting the bias, because of the output grid, but all 25 came back. the other misses are in `experiments/` next to the results.
+i committed predictions to the repo before each batch of runs. 20 of the 36 held. i had guessed pythia's bf16 batch jumps would be bigger than gpt-2's. on most prompts neither model jumped at all, and fewer pythia-160m prompts moved than gpt-2 prompts, 5 against 12, because a grid of 4 swallows small drift until it lets go in a step of 4 or 8. the fp32 unembedding was supposed to fix pythia. it didn't. i also thought 160m's 25 lost prompts would stay lost after deleting the bias, but all 25 came back. in the training runs i expected the invariant part to overtake the rotary part within 3,000 steps, and it ended at 0.34 against 4.04. and outside pythia i expected the growth to be more common and to do more damage than it did. the other misses are in `experiments/` next to the results.
 
-all of this is one task and one model family, run up to 1.4b and read up to 12b. i haven't looked at other models that have a key bias.
+the patching results are one task on pythia and gpt-2. the training runs are a 4-layer model for 3,000 steps. the survey reads 9 families from their weights and runs perplexity on 6 of them.
