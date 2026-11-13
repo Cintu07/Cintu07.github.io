@@ -1,11 +1,11 @@
 ---
-title: 16-bit math told me the wrong part of the model was doing the work
+title: a bias that does nothing broke pythia in bf16
 date: 2026-11-11
-description: i asked which layer of a small language model carries the answer. with normal 32-bit numbers the tool said layer 4 does 3% of the work, and with 16-bit numbers it said 43%. the cause was one bias that shouldn't do anything, and training grew it anyway.
+description: activation patching on pythia-160m in bf16 said mlp layer 4 brings back 43% of the answer. fp32 said 3%. the cause was a key bias that cancels inside softmax. fp16 training and adam grew it to 279 anyway. it's also why pythia's interaction patching is ten times noisier than gpt-2's.
 tags: Interpretability, Numerics, Attention, Pythia
 cover: /assets/img/kerneltrace-cover.png
 ---
-i wanted to know which part of a small language model, pythia-160m, works out who gets the drink in a sentence like "when mary and john went to the store, john gave a drink to". the usual way to check is activation patching. you copy one layer's output from a run that gets the answer right into a run that gets it wrong, and see how much of the right answer comes back. i ran it twice, once with normal 32-bit numbers (fp32) and once with the 16-bit numbers (bf16) people use to save memory, on the same weights and the same 48 prompts. fp32 said mlp layer 4 brings back 3% of the answer. bf16 said 43%.
+i ran the same activation patching sweep on pythia-160m twice, once in fp32 and once in bf16. same weights, same 48 prompts. fp32 said mlp layer 4 brings back 3% of the answer. bf16 said 43%.
 
 on 25 of the 48 prompts bf16 saw no effect at all. the clean run and the corrupted run came out with the same logit diff, and a patch can't bring back a difference that isn't there.
 
