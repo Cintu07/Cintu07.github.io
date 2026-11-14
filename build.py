@@ -263,6 +263,32 @@ SOCIALS = [
     ("email", "mailto:pawankalyan1892@gmail.com"),
 ]
 
+# the person behind the site, as search engines and answer engines read it. sameAs is what ties the blog,
+# pawann.dev, github and x together as one person, so a search for any of the names finds the same one.
+FULL_NAME = "Pawan Kalyan"
+HOME_TITLE = "pawan kalyan (cintu07) · ml infra, databases, inference"
+PERSON = {
+    "@type": "Person",
+    "@id": "https://pawann.dev/#person",
+    "name": FULL_NAME,
+    "alternateName": ["pawan", "Cintu07", "pawann", "pawankalyandev"],
+    "url": "https://pawann.dev",
+    "image": "https://github.com/Cintu07.png",
+    "description": "software engineer who writes about ml infra, databases and inference, and builds seams, a diff viewer written in x86-64 assembly and webassembly.",
+    "knowsAbout": ["ML infrastructure", "inference", "databases", "CUDA", "x86-64 assembly", "WebAssembly", "WebGL", "diff algorithms"],
+    "sameAs": [GITHUB, SITE, "https://pawann.dev", "https://x.com/pawankalyandev",
+               "https://www.linkedin.com/in/pavankalyan-kolagani/"],
+}
+# projects worth naming in llms.txt and the sitemap
+PROJECTS = [
+    ("seams", "https://cintu07.github.io/seams/", "a diff viewer for files too big for everything else. the line diff engine is hand-written x86-64 assembly and webassembly, the view is drawn with webgl. a million-line diff opens in 0.19 s; a cli, a browser library and a github pull request extension."),
+    ("ciot", "https://github.com/Cintu07/ciot", "cpu inference for ternary neural nets in plain c++ and simd, with no dependencies."),
+    ("hiraishin", "https://github.com/Cintu07/hiraishin", "lossless speculative decoding for an 8b model on an 8 gb laptop gpu."),
+    ("kerneltrace", "https://github.com/Cintu07/kerneltrace", "experiments that try to break interpretability claims."),
+    ("heresy", "https://github.com/Cintu07/heresy", "finds go code that disagrees with the rest of its codebase."),
+    ("styx", "https://github.com/Cintu07/styx", "a membership system that answers with a probability instead of yes or no."),
+]
+
 
 def nav_items():
     items = [("/", "writing"), ("/papers/", "papers")]
@@ -610,20 +636,29 @@ def minify_js(js):
 
 
 def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=None, chrome=True, share_title=None, folio="1 / 1"):
-    full_title = NAME if path == "/" else f"{title} · {NAME}"
+    full_title = HOME_TITLE if path == "/" else f"{title} · {FULL_NAME}"
     canonical = SITE + path
     og = og_image if og_image.startswith("http") else SITE + og_image
-    ld = {
-        "@context": "https://schema.org",
-        "@type": "BlogPosting" if article else "WebSite",
-        "headline" if article else "name": title if article else NAME,
-        "description": description,
-        "url": canonical,
-        "author": {"@type": "Person", "name": "Pawan Kalyan", "url": "https://pawann.dev"},
-    }
     if article:
-        ld["datePublished"] = article.date.isoformat()
-        ld["image"] = og
+        page = {
+            "@type": "BlogPosting",
+            "headline": title,
+            "description": description,
+            "url": canonical,
+            "mainEntityOfPage": canonical,
+            "datePublished": article.date.isoformat(),
+            "dateModified": article.date.isoformat(),
+            "image": og,
+            "author": {"@id": PERSON["@id"]},
+            "publisher": {"@id": PERSON["@id"]},
+            "keywords": ", ".join(article.tags),
+        }
+    elif path == "/":
+        page = {"@type": "WebSite", "@id": SITE + "/#website", "name": f"{NAME} · {FULL_NAME.lower()}'s blog", "url": SITE + "/",
+                "description": description, "author": {"@id": PERSON["@id"]}, "inLanguage": "en"}
+    else:
+        page = {"@type": "WebPage", "name": title, "description": description, "url": canonical, "author": {"@id": PERSON["@id"]}}
+    ld = {"@context": "https://schema.org", "@graph": [page, PERSON]}
     links = "".join(
         '<a href="{}"{}>{}</a>'.format(href, ' aria-current="page"' if href == nav else "", label)
         for href, label in nav_items()
@@ -663,12 +698,13 @@ def layout(*, title, description, path, body, nav, og_image=DEFAULT_OG, article=
 <script>{minify_js(THEME_JS)}</script>
 <title>{esc(full_title.lower())}</title>
 <meta name="description" content="{esc(description)}">
+<meta name="author" content="{FULL_NAME}">
 <link rel="canonical" href="{canonical}">
 <link rel="alternate" type="application/rss+xml" title="{NAME}" href="/feed.xml">
 <link rel="icon" href="/assets/img/icon.png">
 <meta property="og:site_name" content="{NAME}">
 <meta property="og:type" content="{"article" if article else "website"}">
-<meta property="og:title" content="{esc((share_title or (title if article else NAME)).lower())}">
+<meta property="og:title" content="{esc((share_title or (title if article else FULL_NAME)).lower())}">
 <meta property="og:description" content="{esc(description)}">
 <meta property="og:url" content="{canonical}">
 <meta property="og:image" content="{og}">
@@ -1151,10 +1187,41 @@ def shrink_svgs():
 
 
 def sitemap(posts, entries):
-    urls = ["/", "/papers/", "/gallery/"] + (["/books/"] + [b["url"] for b in entries if b.get("url")] if entries else []) + [p.url for p in posts]
-    body = "".join(f"<url><loc>{SITE}{u}</loc></url>\n" for u in urls)
+    newest = max(p.date for p in posts).isoformat()
+    urls = [("/", newest), ("/papers/", None), ("/gallery/", None)]
+    urls += ([("/books/", None)] + [(b["url"], None) for b in entries if b.get("url")] if entries else [])
+    urls += [(p.url, p.date.isoformat()) for p in posts]
+    # seams is a separate repo served under this host, so it is listed here, where its robots.txt points
+    urls += [("/seams/", datetime.date.today().isoformat())]
+    body = "".join(f"<url><loc>{SITE}{u}</loc>{f'<lastmod>{d}</lastmod>' if d else ''}</url>\n" for u, d in urls)
     write("/sitemap.xml", f'<?xml version="1.0" encoding="utf-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n{body}</urlset>\n')
     write("/robots.txt", f"User-agent: *\nAllow: /\nSitemap: {SITE}/sitemap.xml\n")
+
+
+# llms.txt (llmstxt.org): a plain summary for answer engines and llm crawlers, with links they can follow
+def llms_txt(posts):
+    projects = "\n".join(f"- [{name}]({url}): {about}" for name, url, about in PROJECTS)
+    writing = "\n".join(f"- [{p.title}]({SITE}{p.url}): {p.description}" for p in posts)
+    socials = "\n".join(f"- {label}: {href}" for label, href in SOCIALS if not href.startswith("mailto:"))
+    text = f"""# {FULL_NAME} (Cintu07)
+
+> {FULL_NAME}, Cintu07 on github, is a self-taught software engineer working on ml infra, inference and databases. this is the blog; the portfolio is https://pawann.dev. projects include seams, a diff viewer whose engine is written by hand in x86-64 assembly and webassembly, and merged pull requests in tinygrad, apache arrow-rs and helix-db.
+
+## projects
+
+{projects}
+
+## writing
+
+{writing}
+
+## elsewhere
+
+- portfolio: https://pawann.dev
+- github: {GITHUB}
+{socials}
+"""
+    write("/llms.txt", text)
 
 
 def main():
@@ -1181,6 +1248,7 @@ def main():
     feed(posts)
     posts_json(posts)
     sitemap(posts, entries)
+    llms_txt(posts)
     print(f"built {len(posts)} posts and {len(entries)} books into {DIST.name}/")
 
 
