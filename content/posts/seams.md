@@ -72,6 +72,8 @@ a canvas comes with none of the browser's usual behaviour, though. selection, co
 
 against that javascript library at its best settings, on the same pair, seams shows the first screen in 0.19 seconds against 6 and finishes highlighting in half a second against 41. to be fair to it, most of its first-screen time is its javascript diff, and its syntax highlighting is better than my small lexers.
 
+the top of a big diff is often the same in both files, and lines that match from the very first one are unchanged in any diff, because the engine sets them aside before it looks for changes. so when two large files open with at least a screen of the same lines, the viewer draws those lines straight away and puts the full diff in when the worker finishes. on the million-line pair, text is up within one frame of the files being in memory, and the whole diff still lands at about 0.19 seconds.
+
 ## a friend's idea
 
 i showed this to a friend who does a lot of web performance work, and the first thing he asked was why the browser was computing the diff at all. if a diff is going to be looked at, compute it once on a server and let the browser only scroll.
@@ -108,7 +110,7 @@ the tab it opens stays in step with the pull request. review comments from githu
 
 most diffs are thirty lines and any tool is fine for those. i'd reach for seams when github says the diff is too large to show, when a coding agent has touched a few thousand lines and i still have to read them, for data that happens to be text like sql dumps, logs and csv files, and for comparing two runs of the same job.
 
-in the viewer, `n` and `p` jump between changes, `ctrl f` searches the whole diff and `v` switches to side by side. there are seven colour themes, and one of them, `clear`, marks deleted lines orange and inserted lines blue, for people who can't tell red from green. in the pull request view `]` and `[` move between files and the box at the top filters them, so typing `codegen` takes twelve hundred files down to the five you want.
+in the viewer, `n` and `p` jump between changes, `ctrl f` searches the whole diff and `v` switches to side by side. the highlighting covers about twenty languages, from typescript and rust to shell, sql and the assembly seams is written in. there are seven colour themes, and one of them, `clear`, marks deleted lines orange and inserted lines blue, for people who can't tell red from green. in the pull request view `]` and `[` move between files and the box at the top filters them, so typing `codegen` takes twelve hundred files down to the five you want.
 
 ## what's still missing
 
