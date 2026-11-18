@@ -1,7 +1,7 @@
 ---
 title: a bias that does nothing broke pythia in bf16
 date: 2026-11-11
-description: activation patching on pythia-160m in bf16 said mlp layer 4 brings back 43% of the answer. fp32 said 3%. the cause was a key bias that cancels inside softmax. fp16 training and adam grew it to 279 anyway. it's also why pythia's interaction patching is ten times noisier than gpt-2's.
+description: activation patching on pythia-160m in bf16 said mlp layer 4 brings back 43% of the answer. fp32 said 3%. the cause was a key bias that cancels inside softmax. fp16 training and adam grew it to 279 anyway. it may also be why pythia's interaction patching is ten times noisier than gpt-2's.
 tags: Interpretability, Numerics, Attention, Pythia
 cover: /assets/img/kerneltrace-cover.png
 ---
@@ -121,7 +121,7 @@ pythia-410m carries an invariant key bias of 132, so i reran that measurement on
 
 ![fig. 8: fp32 error on pair interactions, with and without the invariant key bias, 560 pairs per model, log scale.](/assets/img/kerneltrace/fig-08.png)
 
-on pythia-410m-deduped, the model that paper used, the fp32 floor goes from 3.0e-4 to 9.7e-6 with the bias dropped. on pythia-410m it goes from 1.7e-4 to 3.3e-6. gpt-2 medium sits at 9.2e-6 either way. with the bias gone both pythias land at or under gpt-2 medium, and in fp64 the two versions of each model agree to 1e-11, so what the model computes didn't change. the tenfold gap between the two models was this bias, measured on the same pairs.
+on pythia-410m-deduped, the model that paper used, the fp32 floor goes from 3.0e-4 to 9.7e-6 with the bias dropped. on pythia-410m it goes from 1.7e-4 to 3.3e-6. gpt-2 medium sits at 9.2e-6 either way. with the bias gone both pythias land at or under gpt-2 medium, and in fp64 the two versions of each model agree to 1e-11, so what the model computes didn't change. on these prompts the gap between the two models closes when the bias goes. i haven't rerun that paper's own prompts.
 
 that paper also found that the library's softmax, which casts scores to fp32 even in an fp64 model, dominates the error of fp64 runs. that cast only costs much when the scores carry a big offset, and on these prompts pythia-410m-deduped's largest one is 55,579 against a spread of 17. running fp64 with only that softmax cast gives an interaction error of 1.1e-4, over a third of the whole fp32 floor. with the bias dropped it falls 44 times.
 
@@ -129,6 +129,6 @@ bf16 is worse in a way the bias doesn't explain. its error on these pairs is 0.0
 
 ## what i got wrong
 
-i committed predictions to the repo before each batch of runs. 37 of the 61 held. i had guessed pythia's bf16 batch jumps would be bigger than gpt-2's. on most prompts neither model jumped at all, and fewer pythia-160m prompts moved than gpt-2 prompts, 5 against 12, because a grid of 4 swallows small drift until it lets go in a step of 4 or 8. the fp32 unembedding was supposed to fix pythia. it didn't. i also thought 160m's 25 lost prompts would stay lost after deleting the bias, but all 25 came back. in the training runs i expected the invariant part to overtake the rotary part within 3,000 steps, and it ended at 0.34 against 4.04. and outside pythia i expected the growth to be more common and to do more damage than it did. in the last batch i guessed bloom's offsets didn't come from its bias, and they did. i guessed rewriting its alibi would fix its bf16, and it didn't, which is how i found the logits. the other misses are in `experiments/` next to the results.
+i committed predictions to the repo before each batch of runs. 37 of the 59 held. i had guessed pythia's bf16 batch jumps would be bigger than gpt-2's. on most prompts neither model jumped at all, and fewer pythia-160m prompts moved than gpt-2 prompts, 5 against 12, because a grid of 4 swallows small drift until it lets go in a step of 4 or 8. the fp32 unembedding was supposed to fix pythia. it didn't. i also thought 160m's 25 lost prompts would stay lost after deleting the bias, but all 25 came back. in the training runs i expected the invariant part to overtake the rotary part within 3,000 steps, and it ended at 0.34 against 4.04. and outside pythia i expected the growth to be more common and to do more damage than it did. in the last batch i guessed bloom's offsets didn't come from its bias, and they did. i guessed rewriting its alibi would fix its bf16, and it didn't, which is how i found the logits. the other misses are in `experiments/` next to the results.
 
 the patching results are two tasks on pythia and gpt-2, and the interaction runs are one task on three models. the training runs are a 4-layer model for 3,000 steps. the survey reads 9 families from their weights and runs perplexity on 6 of them.
