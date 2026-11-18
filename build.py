@@ -562,7 +562,7 @@ def gallery_page(items):
 <dialog class="viewer" aria-label="picture"><button class="close" type="button" aria-label="close">&#215;</button><button class="prev" type="button" aria-label="previous">&#8592;</button><img alt=""><button class="next" type="button" aria-label="next">&#8594;</button><p></p></dialog>
 <script>{GALLERY_JS}</script>
 </main>"""
-    write("/gallery/", layout(title="gallery", description="pictures i saved: prints, stamps, pixel art.", path="/gallery/", body=body, nav="/gallery/", share_title="gallery"))
+    write("/gallery/", layout(title="gallery", description="pictures i saved: prints, stamps, pixel art.", path="/gallery/", body=body, nav="/gallery/", og_image="/assets/share/page-gallery.jpg", share_title="gallery"))
 
 
 SHEET_JS = r"""(function () {
@@ -832,8 +832,10 @@ def prepare_book(b):
     b["cover_wide"] = (f"/assets/books/{wide}", w, h)
     b["slug"] = book_slug(b["title"])
     b["url"] = f"/books/{b['slug']}/"
-    b["share"] = f"/assets/og/book-{b['slug']}.png"
-    og_book_card(b, doc[0])
+    b["share"] = f"/assets/share/book-{b['slug']}.jpg"
+    if not (ROOT / b["share"].lstrip("/")).exists():
+        b["share"] = f"/assets/og/book-{b['slug']}.png"
+        og_book_card(b, doc[0])
     return b
 
 
@@ -886,7 +888,7 @@ def books_page(entries):
 {"".join(book_card(b, big=True) for b in entries)}
 </main>"""
     write("/books/", layout(title="books", description=entries[0].get("blurb", ""), path="/books/", body=body, nav="/books/",
-                            og_image=entries[0].get("share", entries[0].get("cover", DEFAULT_OG)), share_title="books"))
+                            og_image="/assets/share/page-books.jpg", share_title="books"))
 
 
 def book_page(b):
@@ -983,7 +985,7 @@ def og_wide_cover(post):
 
 
 def og_cards(posts):
-    # the share cards are typed sheets, photographed once (assets/share). a post without one gets the old card
+    # the share cards are typed sheets drawn by tools/share_cards.py. a post without one gets the old card
     for p in posts:
         card = f"/assets/share/post-{p.slug}.jpg"
         if (ROOT / card.lstrip("/")).exists():
@@ -1113,7 +1115,7 @@ def papers_page():
 {"".join(items)}
 {fav_html}
 </main>"""
-    write("/papers/", layout(title="papers", description="research papers i implement, with the code.", path="/papers/", body=body, nav="/papers/", share_title="papers"))
+    write("/papers/", layout(title="papers", description="research papers i implement, with the code.", path="/papers/", body=body, nav="/papers/", og_image="/assets/share/page-papers.jpg", share_title="papers"))
 
 
 def not_found():

@@ -18,6 +18,8 @@ cover: /assets/img/optional-cover.jpg
 
 a leading `>` quote becomes the standfirst under the title. without one, the description is used. put images in `assets/img/` and link them as `/assets/img/name.png`.
 
+after adding a post, run `python tools/share_cards.py` to draw the picture its link unfurls into. it needs pillow and edge or chrome.
+
 ## papers and books
 
 `content/papers.json` and `content/books.json`. a book has `title`, `blurb`, and optionally `status`, `year`, `url`, `linkText`. the books page and its nav link appear once the list is not empty.
