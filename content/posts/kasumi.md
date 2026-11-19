@@ -1,17 +1,19 @@
 ---
 title: kasumi, a few lines of math turned into a cuda kernel
 date: 2026-11-19
-description: on compiling short formulas into cuda kernels while the program runs, adding a hundred million points into one picture, and an eight hour search that found about six good forms.
+description: a program that takes a few lines of math, turns them into code for the graphics card, and draws them with millions of points. how it works, what was slower than i guessed, and an eight hour run that found about six good pictures.
 tags: rust, cuda, gpu, compilers, generative art
 cover: /assets/img/kasumi-cover.jpg
 ---
-silk is twelve lines of text. point number `i` of twenty million picks one of four hundred strands, works out how far along that strand it is, and moves with a slow wave that depends on the time. kasumi turns those twelve lines into a cuda kernel, runs it once for every point, and counts how many points land on each pixel. the picture is the log of that count, which is the display trick from the fractal flame algorithm. thin threads glow where they cross instead of turning into white blobs.
+kasumi is a program i wrote that draws pictures from math. you write a few lines like `x = cos(u * tau)` in a text file, kasumi runs those lines for millions of points, and it puts a dot of light wherever each point lands. where a lot of points land on the same pixel, that pixel gets brighter. that's the whole idea, and everything below is about doing it fast enough to watch it move.
 
-it all runs on my laptop, an rtx 5060 with 26 streaming multiprocessors and 8 gb of memory. a 4k video frame can take 1.6 billion points and still renders at 13 frames a second with the encode, and saving an edited form puts the new picture on screen in about 190 ms.
+it runs on my laptop's graphics card, an rtx 5060. a graphics card has thousands of small cores that all run the same little program at once, each on different data. that fits this well, because every point runs the same lines of math with a different number plugged in. silk, the form in the picture below, draws twenty million points a frame and still runs at sixty frames a second.
 
-![the code of a form on the left and what it draws on the right](/assets/img/kasumi-split.jpg)
+![a form, the cuda code kasumi makes from it, and the picture](/assets/img/kasumi-fig-pipeline.jpg)
 
-## a form
+## what a form is
+
+i call the text file a form. this is silk, all twelve lines of it:
 
 ```text
 # silk: four hundred strands, each a slow wave, braided by time
@@ -28,76 +30,61 @@ x = r * cos(v + 0.6 * s + 0.15 * sin(t * 0.2)) * 1.25
 y = r * sin(v * 2 + s * 3) * 0.6 + 0.08 * sin(s * tau * 3 + t)
 ```
 
-`u` is the point's index divided by the number of points, so it runs from 0 to 1. `floor(u * 400) / 400` cuts that range into 400 strands, and `fract(u * 400)` is the position inside one strand. `t` is the time in seconds. a form has to set `x` and `y`, and it can set `z` for depth of field, `b` for brightness and `h` for a hue between 0 and 1.
+a few names are always there. `u` is the point's number divided by how many points there are, so the first point has `u = 0` and the last one has `u` close to 1. `t` is the time in seconds, which is what makes it move. the form has to say where the point goes with `x` and `y`, and it can also set its brightness or its colour.
 
-a form that reads `px` or `py`, the previous point, runs differently. each gpu thread walks its own chain, feeding every point into the next one, which is how strange attractors like clifford work.
+so `floor(u * 400)` cuts the twenty million points into 400 groups of 50,000. each group is one strand, and `fract(u * 400)` says how far along its strand a point is.
 
-there's no loop and no memory in the language, and every line is one statement. that's deliberate. it keeps the parser small, and every form can become one straight run of arithmetic on the gpu.
+![every line in silk is one strand of 50,000 points](/assets/img/kasumi-fig-strands.jpg)
 
-## from text to a kernel
+a form can also read `px` and `py`, the point before it. then every point is worked out from the previous one, which is how strange attractors like clifford work.
 
-the parser reads one line at a time. a lexer cuts the line into numbers, names and symbols, and a pratt parser builds the tree. the whole of operator precedence is this table:
+the language has no loops and no memory. every line does one thing. that keeps it small, and it means every form can become one plain run of arithmetic on the gpu.
+
+## turning text into a gpu program
+
+the gpu can't read my text files, so kasumi has to turn each form into real gpu code. it does that in three steps.
+
+first it reads each line and works out its structure. `1 + 2 * 3` has to mean `1 + (2 * 3)`, and that's decided by a small table that says how hard each operator holds on to the numbers next to it:
 
 ```rust
 Tok::Plus => (BinOp::Add, 10, 11),
-Tok::Minus => (BinOp::Sub, 10, 11),
 Tok::Star => (BinOp::Mul, 20, 21),
-Tok::Slash => (BinOp::Div, 20, 21),
-Tok::Percent => (BinOp::Mod, 20, 21),
 Tok::Caret => (BinOp::Pow, 41, 40),
 ```
 
-each operator has a number for how hard it holds the value on its left and one for the value on its right. `*` beats `+`, so `1 + 2 * 3` groups as `1 + (2 * 3)`. `^` holds harder on the left than on the right, which makes `2 ^ 3 ^ 2` group as `2 ^ (3 ^ 2)`. when i swapped those two numbers on purpose for a video, rustc was happy and one test failed, saying `a^q^r` had printed as `(a^q)^r`.
+`*` has bigger numbers than `+`, so it grabs the `2` first. `^` is the odd one. its left number is bigger than its right one, which makes `2 ^ 3 ^ 2` mean `2 ^ (3 ^ 2)`, like in maths class. i swapped those two numbers on purpose while filming a video of the code going in. rust compiled it without a complaint, and one test failed:
 
-![the test that caught the swapped numbers on ^](/assets/img/kasumi-test-caught.jpg)
+![the test that caught the swapped numbers on ^](/assets/img/kasumi-fig-caught.jpg)
 
-![the parser going into neovim during the video, with a comment on each function](/assets/img/kasumi-typing.jpg)
+second, kasumi flattens the form into a list of small steps, like `v7 = v3 * v5`, and tidies the list up. if you write `sin(t)` twice, it keeps one copy. if a step only uses numbers it already knows, it works out the answer right there. `x ^ 2` becomes `x * x`, which a gpu does much faster. steps that never reach `x`, `y` or the colour get deleted.
 
-the error messages are written for a live editor, where you see one every few seconds. `sni(u)` gets `did you mean 'sin'?`, picked by edit distance. `2x` gets told to write `2 * x`. reading `x` before it is set, in a form that has `px`, gets told that `px` is the previous point.
+the step that helps most is this one. anything that's the same for every point, like `sin(t * 0.4)`, gets worked out once a frame on the normal processor and handed to the gpu, instead of twenty million times on the gpu. for silk, the 80 pieces of the original form came down to 34 steps per point.
 
-the tree then becomes an ssa ir, a flat list of steps where each value is set once. every step is hashed as it's made, so writing `sin(t)` twice gives the same step back the second time. `a + b` and `b + a` are put in the same order first so they hash the same. constants fold while the list is being built, `x ^ 2` turns into `x * x`, and `x ^ 0.5` turns into `sqrt(x)`. after that a backwards walk from the outputs marks the steps that matter, and the rest is dropped.
+third, kasumi writes those steps out as cuda, nvidia's language for gpu programs, and pastes them into a template. that's the middle column in the first picture. nvidia's compiler then turns that text into machine code while kasumi is running, so every form gets its own program, made for exactly that form.
 
-the pass that matters most for speed is the last one. anything that doesn't depend on the point, like `sin(t * 0.4)`, gets worked out once a frame on the cpu and handed to the gpu in a small table called `U`. `kasumi ptx` shows what came out for silk:
+one small thing in that code is easy to get wrong. in cuda, `0.22` means a 64-bit number, and this gpu is many times slower with those than with 32-bit ones. so every number goes out as `0.22f`, and the `f` makes it 32-bit.
 
-```text
-ir: 80 ast nodes -> 34 per-point ops | 0 folded, 2 cse hits, 0 dead, 5 hoisted, 6 uniform slots
-  const float v2 = (fi * inv_n) * U[0];
-  const float v3 = floorf(v2);
-  const float v4 = v3 / U[0];
-  const float v5 = ks_fract(v2);
-  const float v7 = v5 * 6.2831855f;
-  ...
-```
+the error messages come from the first step too, and i spent time on them, because when you're editing live you see one every few seconds. `sni(u)` gets `did you mean 'sin'?`. `2x` gets told to write `2 * x`.
 
-`U[0]` is `strands`, a param, which is why it's read from the table and not written in as 400. a param can change without a new kernel.
+## checking that the gpu isn't lying
 
-codegen writes that body as cuda c++ text and pastes it into a template kernel. every name in the template has the form's number in it, so the explorer can put a whole batch of forms in one module and compile them in one call to nvrtc, nvidia's compiler that runs inside the program. a float written as `0.22` in c is a double, and doubles on this gpu are many times slower than floats. every constant goes out as `0.22f`, using rust's `{:?}` formatting so `1` always comes out as `1.0f`.
+a broken gpu program still draws something, often something nice, so you can't tell it's wrong by looking. kasumi has a second copy of the language that runs on the normal processor, slowly, one point at a time. it uses the same random numbers and the same rounding as the gpu version. `kasumi check` runs a sample of points through both and compares the numbers.
 
-## checking every point
+![kasumi check and kasumi bench, from the video](/assets/img/kasumi-fig-checkbench.jpg)
 
-a wrong kernel still draws a picture, often a pretty one, so kasumi has a second implementation of the language. `interp.rs` evaluates the same ir on the cpu in 32-bit floats, with the same hash for random numbers, the same simplex noise and the same floored modulo as the cuda helpers. a probe kernel writes the raw outputs for a sample of points and `kasumi check` compares them:
+the first time i ran it on silk, the biggest difference across 10,000 points was 8.3e-8 of the value, which is a rounding difference in the very last digit.
 
-```text
-silk      strict 100.00% ok  (max rel err 8.3e-8)  as-rendered 100.00% ok
-clifford  strict 100.00% ok  (max rel err 1.7e-7)  as-rendered 100.00% ok
-ink       strict 100.00% ok  (max rel err 6.2e-8)  as-rendered 100.00% ok
-```
+## the slow part i guessed wrong
 
-the first time i ran it, on 10,000 sampled points of silk, the largest relative error was 8.3e-8, which is a rounding difference in the last bit.
+every point adds a bit of light to the pixel it lands on. when twenty million points do that at the same time, two of them can hit the same pixel at once, so the add has to be atomic. an atomic add is one the gpu won't let anything interrupt, so no add gets lost.
 
-one limit of the language comes straight out of this. `i` is a float, and floats are only exact for whole numbers up to about 16.7 million. above that two neighbouring points get the same `i`, so forms with more points use `u`, `r1` or `r2` instead.
+i was sure that would be the slow part. rose is a form where every petal crosses the middle, and at 100 million points its busiest pixel gets hit 22,506 times in one frame. so i planned kasumi around a cleverer method called tile binning. it sorts the points into 64 by 64 pixel tiles first, then adds up each tile in the gpu's small, fast on-chip memory. i wanted it three times faster than the plain atomic add.
 
-## adding a hundred million points into one picture
+![rose, clifford and ink](/assets/img/kasumi-fig-three.jpg)
 
-every point adds a weight into one float per pixel, and colour adds a second float for the hue. that sounds like the hard part. rose is a form where every petal crosses the centre, and at 100 million points its busiest pixel gets hit 22,506 times in one frame. i planned the whole project around that kind of pile-up. the plan was tile binning, sorting points into 64 by 64 tiles and adding each tile up in fast on-chip memory, and the target was three times the speed of a plain atomic add per point.
+i measured three methods. plain does one atomic add per point. warp lets groups of 32 points that hit the same pixel add together once. tile bin is the sorting one. at 3840 by 2160, in billions of points a second:
 
-![rose, clifford and ink](/assets/img/kasumi-rose-clifford-ink.jpg)
-
-kasumi has three ways to do the adding. naive does one `atomicAdd` per point. warp uses `__match_any_sync` to find the threads in a group of 32 that hit the same pixel, and one of them adds for all of them. tile bin counts points per tile, turns the counts into offsets, moves a packed 32-bit key for every point into its tile's part of a buffer, and has each block add one slice of a tile at a time.
-
-at 3840 by 2160, in billions of points per second:
-
-| form | naive | warp | tile bin |
+| form | plain | warp | tile bin |
 |---|---|---|---|
 | silk | 21.5 | 28.3 | 8.6 |
 | rose | 15.8 | 15.3 | 5.6 |
@@ -105,67 +92,65 @@ at 3840 by 2160, in billions of points per second:
 | clifford | 6.9 | 6.8 | 5.6 |
 | ink | 2.2 | 2.2 | 4.0 |
 
-binning lost everywhere except ink, and rose, the worst case, ran at 15.8 billion with plain atomics. my guess is locality. neighbouring points on a curve land on neighbouring addresses, so the memory system sees a tidy stream even when one pixel is very hot. i haven't confirmed that with nsight compute. ink is the opposite, since nearly every point lands somewhere unrelated to the one before it.
+my clever method lost almost everywhere. rose, the case i was worried about, did 15.8 billion points a second with plain atomic adds. my guess is that points along a curve land next to each other in memory, and the memory system handles that well even when one pixel is very busy. i haven't proved that with a profiler yet. ink is the opposite, since its points land all over the place, and it's the only form where sorting won.
 
-the stage timings explain the rest. on silk the counting pass alone took 4.15 ms, and the whole naive frame took about 4.2. most of the time goes into evaluating the formula, so any method that adds passes loses. warp isn't free either. it was 32% faster on silk and 23% slower on tiny.
+the timings showed why. on silk, just working out the math for every point took 4.15 ms, and the whole plain frame took about 4.2. almost all the time goes into the math, so any method that adds extra passes over the points loses.
 
-the first binning kernel ran the formula twice, once to count and once to place. staging the key during the count made the second pass independent of the form and took ink from 1.56 to 1.84 times naive.
+then i tried a bigger picture. a 4k video frame is drawn at 7680 by 4320 and shrunk down, and that changed the result:
 
-then the picture got bigger. a 4k render is drawn at 7680 by 4320 and scaled down, which makes the count buffer 133 mb, and the numbers changed:
-
-| form | naive | warp | tile bin | bin / naive |
+| form | plain | warp | tile bin | tile bin vs plain |
 |---|---|---|---|---|
-| silk | 23.4 | 33.2 | 8.1 | 0.35 |
-| rose | 12.8 | 18.7 | 6.1 | 0.48 |
-| clifford | 0.92 | 0.83 | 4.52 | 4.93 |
-| ink | 1.26 | 1.26 | 3.68 | 2.93 |
+| silk | 23.4 | 33.2 | 8.1 | 0.35x |
+| rose | 12.8 | 18.7 | 6.1 | 0.48x |
+| clifford | 0.92 | 0.83 | 4.52 | 4.93x |
+| ink | 1.26 | 1.26 | 3.68 | 2.93x |
 
-clifford's orbits jump all over the image. with four times as many pixels, naive fell from 6.9 to 0.92 and binning only dropped from 5.6 to 4.52. so the target was met on the forms that scatter and missed on the ones that don't. no method wins everywhere, so the live window and the renderer time all three on the current form and use the fastest. on the run in the video, clifford at that size came out 4.84 times faster with binning.
+clifford's points jump all over the image, and with four times as many pixels the plain method fell from 6.9 to 0.92 billion a second. sorting barely slowed down. so i hit my 3x target on the forms that scatter and missed it on the smooth ones. no method wins everywhere, so kasumi times all three on whatever form you open and uses the fastest.
 
-![kasumi check comparing five forms against the cpu, then kasumi bench on clifford](/assets/img/kasumi-check-bench.jpg)
+## changing it while it runs
 
-## edit to screen
+the live window watches the form's file. when you save, it compiles the new version and swaps it in. at first that took 328 ms. compiling to nvidia's in-between format, ptx, and letting the driver finish the job was 2 to 3 times faster than asking for finished machine code. after a few more changes it's about 190 ms.
 
-the live window watches the form file. the first version took 328 ms from save to the new picture, against a target of 300. nvrtc took about 190 ms and the driver's jit about 110 more. compiling to ptx and letting the driver finish the job measured 2 to 3 times faster than asking nvrtc for finished machine code, and moving the binning kernels out of the live build and folding the warm-up loop into the main loop brought it to about 175 ms. it's about 190 now, after the rewrite further down.
+![a broken save keeps the old picture running, with the error on top](/assets/img/kasumi-fig-broken.jpg)
 
-![a broken save on the left and the old picture still running, with the error, on the right](/assets/img/kasumi-live-broken.jpg)
+if the new version doesn't compile, the old one keeps running and the error shows on the picture. while making the video i noticed those error lines were drawn on top of each other. when i'd switched the window's text to a new font, i kept the line spacing from the old, smaller one. that's fixed now.
 
-a save that doesn't compile keeps the old kernel running and puts the error on the picture. while filming a video of the code going in, i noticed those error lines sat on top of each other. switching the window's text to plex mono had kept the old line spacing from an 8 pixel bitmap font, 10 pixels a line for a 12 pixel font. that fix is in the repo now.
+## letting the computer make new ones
 
-## letting it breed
+once forms worked, i wanted kasumi to come up with new ones. the explorer takes a form and changes it at random. it nudges a number, swaps `sin` for `cos`, adds a small wave on top of part of the math, removes a term, or copies in a piece of another form.
 
-the explorer changes the syntax tree of a form at random. it nudges a constant or a param, swaps `sin` for `cos`, adds a small wave on top of a sub-expression, removes a term, or grafts in a piece of another form. most mutants are junk, and `features.rs` throws out the ones that are blank, blown out, frozen, noisy, thin, tiny, flat or cropped. what survives goes into a map-elites archive of 128 cells, keyed on how much of the frame is lit, how spread out the points are and whether the form has colour, and each cell keeps its best form.
+most of what comes out is junk, so a filter throws away anything blank, blown out, frozen, too noisy, too thin, too small, flat, or cut off at the edge. what's left gets sorted by how much of the frame it lights up, how spread out it is and whether it has colour, and for each kind kasumi keeps the best one it has seen.
 
-early runs filled the archive with solid rectangles, which score well on spread and are not interesting, so there's a filter now for forms that fill their own bounding box. the seed forms also kept the novelty scores they got when they went in, so they sat at the top forever. the archive rescores everything each generation now.
+the first runs filled up with solid rectangles, which count as very spread out and look terrible, so now there's a filter for forms that fill their own box. the starting forms also kept the "new and different" score they got when they first went in, so they stayed on top forever. now every form gets scored again each round.
 
-## teaching it taste
+## teaching it what i like
 
-![the judgement screen](/assets/img/kasumi-judgement.jpg)
+![the judgement screen](/assets/img/kasumi-fig-judge.jpg)
 
-`kasumi grid` shows a reference form and fifteen live mutations of it. clicking marks the ones you like, and every screen gets written down, liked or not. the panel shows what the model sees for the form under the mouse, its lit fraction, spread, motion, aspect and colour, and plots the batch in that space. the taste model is a small classifier on clip embeddings of the thumbnails.
+`kasumi grid` shows the form it started from and fifteen random changes of it, all moving. i click the ones i like, and every screen is saved, liked or not. a small model learns from those clicks. it turns a picture of each form into numbers with clip, an image model, and guesses from those numbers whether i'd like it.
 
-on 540 judgements from one person, 56 of them likes, it ranks a held-out like above a skip 77.8% of the time over five random splits. holding out whole screens, it's 73%. all 540 are on two seeds, knot and rose, so those numbers say nothing about the other forms. before any real clicks existed i tested the pipeline on fake ones and it scored 98.8%, which proves the code runs and nothing else.
+after 540 of my clicks, 56 of them likes, it ranks a like it hasn't seen above a skip 77.8% of the time, and 73% of the time when whole screens are held back. all of those clicks were on two starting forms, knot and rose, so i don't know how well it does on anything else.
 
-## eight hours, about six good forms
+## the night it ran for eight hours
 
-then i let it run overnight. in eight hours it tested 185,016 forms, threw out about 23% as junk and filled 96 of the 128 archive cells. at the end it picked 19 forms for a gallery page.
+then i left it running overnight. in eight hours it tried 185,016 forms, threw out about 23% as junk, and at the end it picked 19 of them for a gallery page.
 
-![the gallery the eight hour run picked by itself](/assets/img/kasumi-auto-gallery.jpg)
+![what the eight hour run picked by itself](/assets/img/kasumi-fig-auto.jpg)
 
-about six of them are good. there are half-frame stripes, a field of noise, slivers, a lone figure eight. a few things went wrong together. the taste model had only ever seen knot and rose, so on everything else it was guessing. the junk filter ran before the taste model, so the model never saw what bad looks like. novelty was about 44% of the score, which pays for being strange. the style cells made room for sparse forms whether they were good or not. and full-frame forms like the orange stripes got through a hole in the cropping filter.
+about six of them are good. a few things went wrong at the same time. the taste model had only seen knot and rose, so on everything else it was guessing. junk was filtered out before i ever judged anything, so the model never learned what bad looks like. being new and different was about 44% of the score, which rewards weird stuff. the sorting into kinds kept room for thin, sparse forms whether they were good or not. and forms that fill the whole frame, like the orange half-and-half one, slipped through a hole in one of the filters.
 
-the gallery that went up has 24 forms, picked by eye from 549 distinct ones.
+so the gallery that went up was picked by eye, 24 forms out of 549 different ones.
 
-![the 24 forms in the published gallery](/assets/img/kasumi-gallery.jpg)
+![the 24 forms in the gallery](/assets/img/kasumi-gallery.jpg)
 
-## making it smaller
+## cleaning it up
 
-kasumi started as four crates, a language, a gpu engine, an explorer and a command line. once it worked i folded them into one, moved the kernels out of rust strings into `.cu` files, and generated each kernel's argument struct for both rust and cuda from a single declaration. 6,970 lines became 5,759. i wanted 4,000, and going further meant taking features out.
+kasumi started as four separate rust packages. once it worked, i merged them into one, moved the gpu code into its own files, and took out what i wasn't using. 6,970 lines went down to 5,759. i wanted 4,000, but getting there meant cutting features.
 
-none of that was allowed to change a single output. the interpreter's numbers for 555 forms came out byte-identical, 11.3 mb of them. 42 renders matched the old build to within one level out of 255, which is atomic adds landing in a different order. speed was within 7% on every form and 0.4% faster on average.
+none of that was allowed to change what kasumi draws. for 555 forms, the slow cpu version gave byte-for-byte the same numbers before and after. 42 rendered pictures matched the old build to within one shade out of 255, and that one shade is the atomic adds landing in a different order. speed stayed within 7% on every form.
 
-## what's still missing
+## what's not done
 
-scatter on ink touches about 1,000 of the 8,160 tiles in each round of 1,024 points, so its writes can't merge. it needs coarser buckets and a second sort, and i haven't built that. the taste model has been trained on two seeds and one person. kasumi has only been tested on windows 11. and the gallery still needs a person looking at it.
+on ink, the sorting step writes points to about 1,000 different tiles at once, so the writes can't be grouped together. fixing that needs a second sorting pass, and i haven't written it. the taste model has only seen two starting forms and one person's clicks. i've only run kasumi on windows 11. and the gallery still needs a person to look at it.
 
-the forms are at [cintu07.github.io/kasumi](https://cintu07.github.io/kasumi/), each with its formula, and the code is on [github](https://github.com/Cintu07/kasumi).
+the 24 forms are at [cintu07.github.io/kasumi](https://cintu07.github.io/kasumi/), each with its math, and the code is on [github](https://github.com/Cintu07/kasumi).
